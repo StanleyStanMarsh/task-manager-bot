@@ -1,8 +1,6 @@
 package ru.spbstu.hsai.api.commands;
 
 import org.springframework.context.event.EventListener;
-import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -31,7 +29,11 @@ public class StartCommand implements TelegramCommand {
         SendMessage sm = SendMessage.builder()
                 .chatId(user.getId())
                 .text(String.format(
-                        "\uD83C\uDF89 Добро пожаловать, %s!%nИспользуйте /help для списка команд.",
+                                """
+                                🎉 Добро пожаловать, %s! 🎉
+                                Этот Бот поможет тебе управлять задачами и не забывать о них!
+                                Используйте /help, чтобы ознакомиться со списком команд.
+                                """,
                         user.getUserName()
                 ))
                 .build();
