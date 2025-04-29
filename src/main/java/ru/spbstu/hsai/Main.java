@@ -4,6 +4,7 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import ru.spbstu.hsai.infrastructure.server.ServerApp;
 import ru.spbstu.hsai.infrastructure.server.BotApp;
 
+import java.util.Arrays;
 import java.util.concurrent.*;
 
 public class Main {
@@ -28,7 +29,7 @@ public class Main {
                 try {
                     BotApp.start(context);
                 } catch (Exception e) {
-                    System.err.println("Ошибка бота: " + e.getMessage());
+                    System.err.println("Ошибка бота: " + Arrays.toString(e.getStackTrace()));
                     latch.countDown();
                 }
             });

@@ -12,7 +12,7 @@ public class BotApp {
 
     public static void start(AnnotationConfigApplicationContext context) throws TelegramApiException {
         TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-        BotProperties props = context.getBean(BotProperties.class);
-        telegramBotsApi.registerBot(new TelegramBotAdapter(props.token(), props.botUsername()));
+        TelegramBotAdapter bot = context.getBean(TelegramBotAdapter.class);
+        telegramBotsApi.registerBot(bot);
     }
 }
