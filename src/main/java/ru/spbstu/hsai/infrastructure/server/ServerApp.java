@@ -8,9 +8,7 @@ import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
 import ru.spbstu.hsai.infrastructure.config.WebConfig;
 
 public class ServerApp {
-    public static void start() {
-        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(WebConfig.class);
-
+    public static void start(AnnotationConfigApplicationContext context) {
         HttpHandler httpHandler = WebHttpHandlerBuilder.applicationContext(context).build();
         UndertowHttpHandlerAdapter adapter = new UndertowHttpHandlerAdapter(httpHandler);
         ServerProperties props = context.getBean(ServerProperties.class);

@@ -1,13 +1,11 @@
 package ru.spbstu.hsai.infrastructure.config;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.PropertySource;
+import org.springframework.context.annotation.*;
 import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import ru.spbstu.hsai.infrastructure.server.BotProperties;
 import ru.spbstu.hsai.infrastructure.server.ServerProperties;
 import ru.spbstu.hsai.modules.check.HelloHandler;
 
@@ -18,6 +16,7 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 @Configuration
 @EnableWebFlux
 @PropertySource("classpath:application.properties")
+@PropertySource("classpath:telegram.properties")
 public class WebConfig {
 
     @Bean
@@ -25,6 +24,13 @@ public class WebConfig {
             @Value("${server.host}") String host,
             @Value("${server.port}") int port) {
         return new ServerProperties(host, port);
+    }
+
+    @Bean
+    public BotProperties botProperties(
+            @Value("${telegram.bot.token}") String token,
+            @Value("${telegram.bot.username}") String botUsername) {
+        return new BotProperties(token, botUsername);
     }
 
     @Bean
