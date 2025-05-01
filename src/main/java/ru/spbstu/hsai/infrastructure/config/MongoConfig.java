@@ -11,9 +11,13 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
 import ru.spbstu.hsai.infrastructure.db.MongoProperties;
+import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
 @ComponentScan(basePackages = "ru.spbstu.hsai")
 @Configuration
+@EnableMongoRepositories(
+        basePackages = "ru.spbstu.hsai.modules.usermanagement.repository"
+)
 @PropertySource("classpath:mongo.properties")
 public class MongoConfig  {
 
