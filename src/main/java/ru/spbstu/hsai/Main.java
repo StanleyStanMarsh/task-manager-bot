@@ -10,7 +10,8 @@ import java.util.concurrent.*;
 public class Main {
     public static void main(String[] args) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
-                ru.spbstu.hsai.infrastructure.config.WebConfig.class
+                ru.spbstu.hsai.infrastructure.config.WebConfig.class,
+                ru.spbstu.hsai.infrastructure.config.MongoConfig.class
         );
 
         CountDownLatch latch = new CountDownLatch(1);
