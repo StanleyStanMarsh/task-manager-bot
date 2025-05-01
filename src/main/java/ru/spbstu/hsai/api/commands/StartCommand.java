@@ -7,14 +7,18 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
+import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+
 
 @Component
 public class StartCommand implements TelegramCommand {
 
     private final TelegramSenderService sender;
+    private final UserService userService;
 
-    public StartCommand(TelegramSenderService sender) {
+    public StartCommand(TelegramSenderService sender, UserService userService) {
         this.sender = sender;
+        this.userService = userService;
     }
 
     @Override
@@ -38,6 +42,12 @@ public class StartCommand implements TelegramCommand {
                 ))
                 .build();
         sender.send(sm);
-        // TODO сделать логику добавления пользователя в бд
+        userService.registerIfAbsent(
+                user.getId(),
+                user.getUserName(),
+                user.getFirstName(),
+                user.getLastName()
+        );
+
     }
 }
