@@ -2,6 +2,10 @@ package ru.spbstu.hsai.modules.usermanagement.service;
 
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.modules.usermanagement.exceptions.AlreadyGrantedException;
+import ru.spbstu.hsai.modules.usermanagement.exceptions.SenderNotFoundException;
+import ru.spbstu.hsai.modules.usermanagement.exceptions.TargetNotFoundException;
+import ru.spbstu.hsai.modules.usermanagement.exceptions.UnauthorizedOperationException;
 import ru.spbstu.hsai.modules.usermanagement.model.User;
 import ru.spbstu.hsai.modules.usermanagement.repository.UserRepository;
 
@@ -56,5 +60,24 @@ public class UserService {
         return (username != null && !username.equals(user.getUsername())) ||
                 (firstName != null && !firstName.equals(user.getFirstName())) ||
                 (lastName != null && !lastName.equals(user.getLastName()));
+    }
+
+    public Mono<Void> promoteToAdmin(Long senderId, Long targetId) {
+        return userRepository.findByTelegramId(senderId)
+                .switchIfEmpty(Mono.error(new SenderNotFoundException(senderId)))
+                .flatMap(senderUser -> {
+                    if (!"ADMIN".equals(senderUser.getRole())) {
+                        return Mono.error(new UnauthorizedOperationException(senderId));
+                    }
+                    return userRepository.findByTelegramId(targetId)
+                            .switchIfEmpty(Mono.error(new TargetNotFoundException(targetId)))
+                            .flatMap(targetUser -> {
+                                if ("ADMIN".equals(targetUser.getRole())) {
+                                    return Mono.error(new AlreadyGrantedException(targetId));
+                                }
+                                targetUser.setRole("ADMIN");
+                                return userRepository.save(targetUser).then();
+                            });
+                });
     }
 }

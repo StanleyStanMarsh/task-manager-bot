@@ -8,8 +8,10 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import ru.spbstu.hsai.infrastructure.server.BotProperties;
 import ru.spbstu.hsai.infrastructure.server.ServerProperties;
 import ru.spbstu.hsai.modules.check.HelloHandler;
+import ru.spbstu.hsai.modules.usermanagement.controller.UserController;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
+import static org.springframework.web.reactive.function.server.RequestPredicates.PATCH;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 @ComponentScan(basePackages = "ru.spbstu.hsai")
@@ -34,7 +36,11 @@ public class WebConfig {
     }
 
     @Bean
-    public RouterFunction<ServerResponse> routes(HelloHandler helloHandler) {
-        return route(GET("/hello"), helloHandler::hello);
+    public RouterFunction<ServerResponse> routes(
+            HelloHandler helloHandler,
+            UserController userController
+    ) {
+        return route(GET("/hello"), helloHandler::hello)
+                .andRoute(PATCH("/users/{telegramId}/promote"), userController::promote);
     }
 }
