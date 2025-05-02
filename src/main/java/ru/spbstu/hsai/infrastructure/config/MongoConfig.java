@@ -19,6 +19,7 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
         basePackages = "ru.spbstu.hsai.modules.usermanagement.repository"
 )
 @PropertySource("classpath:mongo.properties")
+@PropertySource("classpath:superadmin.properties")
 public class MongoConfig  {
 
     @Bean
