@@ -1,25 +1,25 @@
 package ru.spbstu.hsai.infrastructure.config;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
+import com.mongodb.reactivestreams.client.MongoClient;
+import com.mongodb.reactivestreams.client.MongoClients;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.MongoDatabaseFactory;
-import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
+import org.springframework.data.mongodb.ReactiveMongoDatabaseFactory;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.SimpleReactiveMongoDatabaseFactory;
+import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRepositories;
 import ru.spbstu.hsai.infrastructure.db.MongoProperties;
-import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
 @ComponentScan(basePackages = "ru.spbstu.hsai")
 @Configuration
-@EnableMongoRepositories(
+@EnableReactiveMongoRepositories(
         basePackages = "ru.spbstu.hsai.modules.usermanagement.repository"
 )
 @PropertySource("classpath:mongo.properties")
-public class MongoConfig  {
+public class MongoConfig {
 
     @Bean
     public MongoProperties mongoProperties(
@@ -29,19 +29,17 @@ public class MongoConfig  {
     }
 
     @Bean
-    public MongoClient mongoClient(MongoProperties props) {
+    public MongoClient reactiveMongoClient(MongoProperties props) {
         return MongoClients.create(props.host());
     }
 
     @Bean
-    public MongoDatabaseFactory mongoDatabaseFactory(MongoClient client, MongoProperties props) {
-        return new SimpleMongoClientDatabaseFactory(client, props.database());
+    public ReactiveMongoDatabaseFactory reactiveMongoDatabaseFactory(MongoClient client, MongoProperties props) {
+        return new SimpleReactiveMongoDatabaseFactory(client, props.database());
     }
 
     @Bean
-    public MongoTemplate mongoTemplate(MongoDatabaseFactory factory) {
-        return new MongoTemplate(factory);
+    public ReactiveMongoTemplate reactiveMongoTemplate(ReactiveMongoDatabaseFactory factory) {
+        return new ReactiveMongoTemplate(factory);
     }
 }
-
-
