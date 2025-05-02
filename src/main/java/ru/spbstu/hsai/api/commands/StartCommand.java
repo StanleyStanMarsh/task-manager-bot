@@ -5,10 +5,10 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
-
 
 @Component
 public class StartCommand implements TelegramCommand {
@@ -29,25 +29,30 @@ public class StartCommand implements TelegramCommand {
     @EventListener(condition = "@telegramCommandsExtract.checkCommand(#a0.update, '/start')")
     public void handle(UpdateReceivedEvent event) {
         Message message = event.getUpdate().getMessage();
-        User user = message.getFrom();
-        SendMessage sm = SendMessage.builder()
-                .chatId(user.getId())
-                .text(String.format(
-                                """
-                                🎉 Добро пожаловать, %s! 🎉
-                                Этот Бот поможет тебе управлять задачами и не забывать о них!
-                                Используйте /help, чтобы ознакомиться со списком команд.
-                                """,
-                        user.getUserName()
-                ))
-                .build();
-        sender.send(sm);
-        userService.registerIfAbsent(
-                user.getId(),
-                user.getUserName(),
-                user.getFirstName(),
-                user.getLastName()
-        );
+        User tgUser = message.getFrom();
 
+        // Создаем реактивный SendMessage
+        Mono<SendMessage> sendMessageMono = Mono.just(SendMessage.builder()
+                .chatId(tgUser.getId())
+                .text(String.format(
+                        """
+                        🎉 Добро пожаловать, %s! 🎉
+                        Этот Бот поможет тебе управлять задачами и не забывать о них!
+                        Используйте /help, чтобы ознакомиться со списком команд.
+                        """,
+                        tgUser.getUserName()
+                ))
+                .build());
+
+        // Реактивно отправляем сообщение и сохраняем пользователя
+        sendMessageMono
+                .flatMap(sm -> Mono.fromCompletionStage(sender.sendAsync(sm))) // Асинхронная отправка
+                .then(userService.registerIfAbsent(
+                        tgUser.getId(),
+                        tgUser.getUserName(),
+                        tgUser.getFirstName(),
+                        tgUser.getLastName()
+                ))
+                .subscribe(); // Fire-and-forget для всей цепочки
     }
 }
