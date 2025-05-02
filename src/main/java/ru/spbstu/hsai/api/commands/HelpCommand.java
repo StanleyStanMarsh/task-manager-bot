@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 
@@ -26,7 +27,9 @@ public class HelpCommand implements TelegramCommand {
     public void handle(UpdateReceivedEvent event) {
         Message message = event.getUpdate().getMessage();
         User user = message.getFrom();
-        SendMessage sm = SendMessage.builder()
+
+        // Создаем реактивный SendMessage
+        Mono<SendMessage> sendMessageMono = Mono.just(SendMessage.builder()
                 .chatId(user.getId())
                 .text(
                         """
@@ -46,7 +49,11 @@ public class HelpCommand implements TelegramCommand {
                         /authors - об авторах
                         """
                 )
-                .build();
-        sender.send(sm);
+                .build());
+
+        // Реактивно отправляем сообщение
+        sendMessageMono
+                .flatMap(sm -> Mono.fromCompletionStage(sender.sendAsync(sm)))
+                .subscribe(); // Fire-and-forget
     }
 }
