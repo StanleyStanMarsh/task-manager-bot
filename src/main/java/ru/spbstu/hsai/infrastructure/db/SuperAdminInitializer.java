@@ -2,19 +2,16 @@ package ru.spbstu.hsai.infrastructure.db;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.mongodb.core.FindAndModifyOptions;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
-import ru.spbstu.hsai.modules.usermanagement.model.User;
+import reactor.core.Disposable;
+import reactor.core.scheduler.Schedulers;
+import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import javax.annotation.PostConstruct;
 
 @Configuration
 public class SuperAdminInitializer {
 
-    private final MongoTemplate mongoTemplate;
+    private final UserService userService;
 
     @Value("${superadmin.telegramId}")
     private Long telegramId;
@@ -25,26 +22,17 @@ public class SuperAdminInitializer {
     @Value("${superadmin.lastName}")
     private String lastName;
 
-    public SuperAdminInitializer(MongoTemplate mongoTemplate) {
-        this.mongoTemplate = mongoTemplate;
+    public SuperAdminInitializer(UserService userService) {
+        this.userService = userService;
     }
 
     @PostConstruct
-    public void ensureSuperAdmin() {
-        System.out.println("telegramId: " + telegramId);
-        System.out.println("MongoTemplate: " + mongoTemplate);
-        Query query = Query.query(Criteria.where("telegramId").is(telegramId));
-        Update update = new Update()
-                .setOnInsert("telegramId", telegramId)
-                .setOnInsert("role", "ADMIN")
-                .setOnInsert("username", username)
-                .setOnInsert("firstName", firstName)
-                .setOnInsert("lastName", lastName);
-        mongoTemplate.findAndModify(
-                query,
-                update,
-                FindAndModifyOptions.options().upsert(true).returnNew(true),
-                User.class
-        );
+    public void init() {
+        // Запускаем в фоновом реактивном потоке, чтобы не блокировать старт контекста
+        Disposable d = userService.ensureSuperAdmin(telegramId, username, firstName, lastName)
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnSuccess(u -> System.out.println("Super-admin инициализирован: " + u.getTelegramId()))
+                .doOnError(err -> System.err.println("Не удалось инициализировать super-admin: " + err.getMessage()))
+                .subscribe();
     }
 }

@@ -31,6 +31,21 @@ public class UserService {
                 }));
     }
 
+    public Mono<User> ensureSuperAdmin(Long telegramId, String username, String firstName, String lastName) {
+        return userRepository.findByTelegramId(telegramId)
+                .flatMap(existing -> {
+                    // уже есть — ничего не меняем, возвращаем
+                    return Mono.just(existing);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    User admin = new User(telegramId, "ADMIN");
+                    admin.setUsername(username);
+                    admin.setFirstName(firstName);
+                    admin.setLastName(lastName);
+                    return userRepository.save(admin);
+                }));
+    }
+
     private void setUserFields(User user, String username, String firstName, String lastName) {
         if (username != null) user.setUsername(username);
         if (firstName != null) user.setFirstName(firstName);
