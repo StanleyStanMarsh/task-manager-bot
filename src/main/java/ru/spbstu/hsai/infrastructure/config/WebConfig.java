@@ -10,8 +10,7 @@ import ru.spbstu.hsai.infrastructure.server.ServerProperties;
 import ru.spbstu.hsai.modules.check.HelloHandler;
 import ru.spbstu.hsai.modules.usermanagement.controller.UserController;
 
-import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
-import static org.springframework.web.reactive.function.server.RequestPredicates.PATCH;
+import static org.springframework.web.reactive.function.server.RequestPredicates.*;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 @ComponentScan(basePackages = "ru.spbstu.hsai")
@@ -41,6 +40,7 @@ public class WebConfig {
             UserController userController
     ) {
         return route(GET("/hello"), helloHandler::hello)
-                .andRoute(PATCH("/users/{telegramId}/promote"), userController::promote);
+                .andRoute(PATCH("/users/{telegramId}/promote"), userController::promote)
+                .andRoute(PATCH("/self_demote"), userController::selfDemote);
     }
 }

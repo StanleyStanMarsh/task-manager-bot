@@ -7,10 +7,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.AlreadyGrantedException;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.SenderNotFoundException;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.TargetNotFoundException;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.UnauthorizedOperationException;
+import ru.spbstu.hsai.modules.usermanagement.exceptions.*;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.Instant;
@@ -57,6 +54,35 @@ public class UserController {
                         e -> ServerResponse.status(HttpStatus.BAD_REQUEST)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.BAD_REQUEST.value(), Instant.now().toString())), BaseResponse.class)
+                );
+    }
+
+    public Mono<ServerResponse> selfDemote(ServerRequest request) {
+        Long senderId = Long.valueOf(request.queryParam("senderId")
+                .orElseThrow(() -> new IllegalArgumentException("senderId query parameter is required")));
+        return userService.selfDemoteToUser(senderId)
+                .then(
+                        ServerResponse.ok()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.OK.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        SenderNotFoundException.class,
+                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        UnauthorizedOperationException.class,
+                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        SuperAdminDemoteException.class,
+                        e -> ServerResponse.status(HttpStatus.CONFLICT)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())), BaseResponse.class)
                 );
     }
 }

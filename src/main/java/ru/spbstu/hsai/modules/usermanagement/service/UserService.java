@@ -2,12 +2,10 @@ package ru.spbstu.hsai.modules.usermanagement.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.AlreadyGrantedException;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.SenderNotFoundException;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.TargetNotFoundException;
-import ru.spbstu.hsai.modules.usermanagement.exceptions.UnauthorizedOperationException;
+import ru.spbstu.hsai.modules.usermanagement.exceptions.*;
 import ru.spbstu.hsai.modules.usermanagement.model.User;
 import ru.spbstu.hsai.modules.usermanagement.repository.UserRepository;
 
@@ -16,6 +14,9 @@ public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private final UserRepository userRepository;
+
+    @Value("${superadmin.telegramId}")
+    private String superAdminId;
 
     public UserService(UserRepository userRepository) {
         this.userRepository = userRepository;
@@ -110,6 +111,21 @@ public class UserService {
                                 targetUser.setRole("ADMIN");
                                 return userRepository.save(targetUser).then();
                             });
+                });
+    }
+
+    public Mono<Void> selfDemoteToUser(Long senderId) {
+        return userRepository.findByTelegramId(senderId)
+                .switchIfEmpty(Mono.error(new SenderNotFoundException(senderId)))
+                .flatMap(senderUser -> {
+                    if (!"ADMIN".equals(senderUser.getRole())) {
+                        return Mono.error(new UnauthorizedOperationException(senderId));
+                    }
+                    if (superAdminId.equals(senderId.toString())) {
+                        return Mono.error(new SuperAdminDemoteException());
+                    }
+                    senderUser.setRole("USER");
+                    return userRepository.save(senderUser).then();
                 });
     }
 }
