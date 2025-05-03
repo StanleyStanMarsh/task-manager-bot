@@ -2,7 +2,6 @@ package ru.spbstu.hsai.modules.usermanagement.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -11,7 +10,6 @@ import ru.spbstu.hsai.modules.usermanagement.exceptions.*;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.Instant;
-import java.util.Map;
 
 @Controller
 public class UserController {
@@ -33,25 +31,25 @@ public class UserController {
                 )
                 .onErrorResume(
                         UnauthorizedOperationException.class,
-                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         SenderNotFoundException.class,
-                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         TargetNotFoundException.class,
-                        e -> ServerResponse.status(HttpStatus.NOT_FOUND)
+                        _ -> ServerResponse.status(HttpStatus.NOT_FOUND)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.NOT_FOUND.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         AlreadyGrantedException.class,
-                        e -> ServerResponse.status(HttpStatus.BAD_REQUEST)
+                        _ -> ServerResponse.status(HttpStatus.BAD_REQUEST)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.BAD_REQUEST.value(), Instant.now().toString())), BaseResponse.class)
                 );
@@ -68,19 +66,19 @@ public class UserController {
                 )
                 .onErrorResume(
                         SenderNotFoundException.class,
-                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         UnauthorizedOperationException.class,
-                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         SuperAdminDemoteException.class,
-                        e -> ServerResponse.status(HttpStatus.CONFLICT)
+                        _ -> ServerResponse.status(HttpStatus.CONFLICT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())), BaseResponse.class)
                 );
@@ -98,31 +96,31 @@ public class UserController {
                 )
                 .onErrorResume(
                         UnauthorizedOperationException.class,
-                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         SenderNotFoundException.class,
-                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         TargetNotFoundException.class,
-                        e -> ServerResponse.status(HttpStatus.NOT_FOUND)
+                        _ -> ServerResponse.status(HttpStatus.NOT_FOUND)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.NOT_FOUND.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         SuperAdminDemoteException.class,
-                        e -> ServerResponse.status(HttpStatus.CONFLICT)
+                        _ -> ServerResponse.status(HttpStatus.CONFLICT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())), BaseResponse.class)
                 )
                 .onErrorResume(
                         AlreadyUserException.class,
-                        e -> ServerResponse.status(HttpStatus.BAD_REQUEST)
+                        _ -> ServerResponse.status(HttpStatus.BAD_REQUEST)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .body(Mono.just(new BaseResponse(HttpStatus.BAD_REQUEST.value(), Instant.now().toString())), BaseResponse.class)
                 );
