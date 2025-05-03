@@ -1,9 +1,8 @@
 package ru.spbstu.hsai.modules.usermanagement.model;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.PersistenceConstructor;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
 
 @Document(collection = "users")
 public class User {
@@ -11,6 +10,7 @@ public class User {
     @Id
     private String id;
 
+    @Indexed
     private Long telegramId;
     private String username;  // может отсутствовать
     private String firstName;  // может отсутствовать
@@ -18,6 +18,8 @@ public class User {
     private String role = "USER"; // значение по умолчанию
 
     // Конструкторы
+    public User() {}
+
     public User(Long telegramId, String role) {
         this.telegramId = telegramId;
         this.role = role;
@@ -25,7 +27,6 @@ public class User {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-
 
     public Long getTelegramId() {
         return telegramId;
@@ -61,4 +62,11 @@ public class User {
     public void setRole(String role) {
         this.role = role;
     }
+
+    @Override
+    public String toString() {
+        return "User{id='" + id + "', telegramId=" + telegramId + ", role='" + role + "', username='" + username + "'}";
+    }
 }
+
+

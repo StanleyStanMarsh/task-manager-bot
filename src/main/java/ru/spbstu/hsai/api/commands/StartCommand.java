@@ -43,16 +43,22 @@ public class StartCommand implements TelegramCommand {
                         tgUser.getUserName()
                 ))
                 .build());
+        System.out.println("Starting message creation");
 
         // Реактивно отправляем сообщение и сохраняем пользователя
         sendMessageMono
-                .flatMap(sm -> Mono.fromCompletionStage(sender.sendAsync(sm))) // Асинхронная отправка
+                .flatMap(sm -> {
+                    System.out.println("Sending message for chatId=" + tgUser.getId());
+                    return Mono.fromCompletionStage(sender.sendAsync(sm));
+                })
                 .then(userService.registerIfAbsent(
                         tgUser.getId(),
                         tgUser.getUserName(),
                         tgUser.getFirstName(),
                         tgUser.getLastName()
                 ))
+                .doOnSuccess(v -> System.out.println("Registration completed"))
+                .doOnError(e -> System.out.println("Error: " + e.getMessage()))
                 .subscribe(); // Fire-and-forget для всей цепочки
     }
 }
