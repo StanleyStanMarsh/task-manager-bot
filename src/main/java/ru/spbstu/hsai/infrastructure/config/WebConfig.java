@@ -41,6 +41,7 @@ public class WebConfig {
     ) {
         return route(GET("/hello"), helloHandler::hello)
                 .andRoute(PATCH("/users/{telegramId}/promote"), userController::promote)
-                .andRoute(PATCH("/self_demote"), userController::selfDemote);
+                .andRoute(PATCH("/self_demote"), userController::selfDemote)
+                .andRoute(PATCH("/users/{telegramId}/demote"), userController::demote);
     }
 }

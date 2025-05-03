@@ -128,4 +128,26 @@ public class UserService {
                     return userRepository.save(senderUser).then();
                 });
     }
+
+    public Mono<Void> demoteToUser(Long senderId, Long targetId) {
+        return userRepository.findByTelegramId(senderId)
+                .switchIfEmpty(Mono.error(new SenderNotFoundException(senderId)))
+                .flatMap(senderUser -> {
+                    if (!superAdminId.equals(senderId.toString())) {
+                        return Mono.error(new UnauthorizedOperationException(senderId));
+                    }
+                    return userRepository.findByTelegramId(targetId)
+                            .switchIfEmpty(Mono.error(new TargetNotFoundException(targetId)))
+                            .flatMap(targetUser -> {
+                                if (superAdminId.equals(targetId.toString())) {
+                                    return Mono.error(new SuperAdminDemoteException());
+                                }
+                                if ("USER".equals(targetUser.getRole())) {
+                                    return Mono.error(new AlreadyUserException(targetId));
+                                }
+                                targetUser.setRole("USER");
+                                return userRepository.save(targetUser).then();
+                            });
+                });
+    }
 }

@@ -85,4 +85,46 @@ public class UserController {
                                 .body(Mono.just(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())), BaseResponse.class)
                 );
     }
+
+    public Mono<ServerResponse> demote(ServerRequest request) {
+        Long senderId = Long.valueOf(request.queryParam("senderId")
+                .orElseThrow(() -> new IllegalArgumentException("senderId query parameter is required")));
+        Long targetId = Long.valueOf(request.pathVariable("telegramId"));
+        return userService.demoteToUser(senderId, targetId)
+                .then(
+                        ServerResponse.ok()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.OK.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        UnauthorizedOperationException.class,
+                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        SenderNotFoundException.class,
+                        e -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        TargetNotFoundException.class,
+                        e -> ServerResponse.status(HttpStatus.NOT_FOUND)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.NOT_FOUND.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        SuperAdminDemoteException.class,
+                        e -> ServerResponse.status(HttpStatus.CONFLICT)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())), BaseResponse.class)
+                )
+                .onErrorResume(
+                        AlreadyUserException.class,
+                        e -> ServerResponse.status(HttpStatus.BAD_REQUEST)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(Mono.just(new BaseResponse(HttpStatus.BAD_REQUEST.value(), Instant.now().toString())), BaseResponse.class)
+                );
+    }
 }
