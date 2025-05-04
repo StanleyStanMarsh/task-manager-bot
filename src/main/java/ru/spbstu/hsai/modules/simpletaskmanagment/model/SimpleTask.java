@@ -15,6 +15,8 @@ public class SimpleTask {
     private int complexity;
     private LocalDate deadline;
     private ReminderType reminder;
+    private boolean isCompleted = false;
+
 
     // Enum для типов напоминаний
     public enum ReminderType {
@@ -75,12 +77,28 @@ public class SimpleTask {
         this.complexity = complexity;
     }
 
+    public LocalDate getDeadline() {
+        return deadline;
+    }
+
+    public void setDeadline(LocalDate date) {
+        this.deadline = date;
+    }
+
     public ReminderType getReminder() {
         return reminder;
     }
 
     public void setReminder(ReminderType reminder) {
         this.reminder = reminder;
+    }
+
+    public boolean isCompleted() {
+        return isCompleted;
+    }
+
+    public void setCompleted(boolean completed) {
+        isCompleted = completed;
     }
 
     @Override
