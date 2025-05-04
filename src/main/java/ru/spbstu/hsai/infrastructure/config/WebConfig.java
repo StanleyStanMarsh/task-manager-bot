@@ -45,6 +45,7 @@ public class WebConfig {
                 .andRoute(PATCH("/users/{telegramId}/promote"), userController::promote)
                 .andRoute(PATCH("/self_demote"), userController::selfDemote)
                 .andRoute(PATCH("/users/{telegramId}/demote"), userController::demote)
-                .andRoute(GET("/authors"),authorsController::authors);
+                .andRoute(GET("/authors"),authorsController::authors)
+                .andRoute(GET("/users"), userController::listUsersExcluding);
     }
 }

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.usermanagement.exceptions.*;
 import ru.spbstu.hsai.modules.usermanagement.model.User;
@@ -148,6 +149,18 @@ public class UserService {
                                 targetUser.setRole("USER");
                                 return userRepository.save(targetUser).then();
                             });
+                });
+    }
+
+    public Flux<User> getAllUsersExceptSuperAdmin(Long senderId) {
+        return userRepository.findByTelegramId(senderId)
+                .switchIfEmpty(Mono.error(new SenderNotFoundException(senderId)))
+                .flatMapMany(senderUser -> {
+                    if (!"ADMIN".equals(senderUser.getRole())) {
+                        return Mono.error(new UnauthorizedOperationException(senderId));
+                    }
+                    Long superId = Long.parseLong(superAdminId);
+                    return userRepository.findByTelegramIdNot(superId);
                 });
     }
 }
