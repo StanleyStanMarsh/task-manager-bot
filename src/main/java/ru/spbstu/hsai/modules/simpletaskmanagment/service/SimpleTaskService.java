@@ -57,16 +57,4 @@ public class SimpleTaskService {
                 });
     }
 
-    // тестовый метод для создания задачи
-    public Mono<SimpleTask> createTestTask(String userId) {
-        SimpleTask task = new SimpleTask(
-                userId,
-                "Тестовая задача",
-                3,
-                LocalDate.now().plusDays(1),
-                SimpleTask.ReminderType.ONE_DAY_BEFORE
-        );
-        return taskRepository.save(task);
-    }
-
 }

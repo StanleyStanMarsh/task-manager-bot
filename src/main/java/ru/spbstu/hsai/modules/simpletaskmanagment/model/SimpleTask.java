@@ -104,11 +104,12 @@ public class SimpleTask {
     @Override
     public String toString() {
         return "Задача создана!\n" +
-                "🆔ID: " + id + "\n" +
+                "🆔 ID: <code>" + id + "</code>\n" +
                 "📌Описание: " + description + "\n" +
                 "📊Сложность: " + complexity + "\n" +
                 "🗓️Дедлайн: " + deadline.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + "\n" +
                 "⏰Напоминание: " + reminder.getDisplayName();
     }
+
 
 }
