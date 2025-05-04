@@ -22,6 +22,12 @@ public class UserService {
         this.userRepository = userRepository;
     }
 
+    public Mono<User> findByTelegramId(Long telegramId) {
+        return userRepository.findByTelegramId(telegramId)
+                .doOnNext(user -> log.debug("Найден пользователь: {}", user))
+                .doOnError(error -> log.error("Ошибка поиска пользователя с telegramId={}: {}", telegramId, error.getMessage()));
+    }
+
     public Mono<Void> registerIfAbsent(Long telegramId, String username, String firstName, String lastName) {
         System.out.println("Checking user with telegramId=" + telegramId);
         return userRepository.findByTelegramId(telegramId)
