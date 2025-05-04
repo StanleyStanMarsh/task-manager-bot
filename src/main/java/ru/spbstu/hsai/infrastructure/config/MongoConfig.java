@@ -16,7 +16,10 @@ import ru.spbstu.hsai.infrastructure.db.MongoProperties;
 @ComponentScan(basePackages = "ru.spbstu.hsai")
 @Configuration
 @EnableReactiveMongoRepositories(
-        basePackages = "ru.spbstu.hsai.modules.usermanagement.repository"
+        basePackages = {
+                "ru.spbstu.hsai.modules.usermanagement.repository",
+                "ru.spbstu.hsai.modules.simpletaskmanagment.repository"
+        }
 )
 @PropertySource("classpath:mongo.properties")
 @PropertySource("classpath:superadmin.properties")
