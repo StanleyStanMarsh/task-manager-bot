@@ -1,5 +1,7 @@
 package ru.spbstu.hsai.infrastructure.db;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.Disposable;
@@ -10,6 +12,8 @@ import javax.annotation.PostConstruct;
 
 @Configuration
 public class SuperAdminInitializer {
+
+    private static final Logger log = LoggerFactory.getLogger(SuperAdminInitializer.class);
 
     private final UserService userService;
 
@@ -31,8 +35,8 @@ public class SuperAdminInitializer {
         // Запускаем в фоновом реактивном потоке, чтобы не блокировать старт контекста
         Disposable d = userService.ensureSuperAdmin(telegramId, username, firstName, lastName)
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnSuccess(u -> System.out.println("Super-admin инициализирован: " + u.getTelegramId()))
-                .doOnError(err -> System.err.println("Не удалось инициализировать super-admin: " + err.getMessage()))
+                .doOnSuccess(u -> log.info("Super-admin инициализирован: {}", u.getTelegramId()))
+                .doOnError(err -> log.error("Не удалось инициализировать super-admin: {}", err.getMessage()))
                 .subscribe();
     }
 }
