@@ -156,49 +156,60 @@ public class UserController {
     }
 
     public Mono<ServerResponse> listUsersExcluding(ServerRequest request) {
-        Long senderId = Long.valueOf(request.queryParam("senderId")
-                .orElseThrow(() -> new IllegalArgumentException("senderId query parameter is required")));
         String format = request.queryParam("format").orElse("json");
 
-        return userService.getAllUsersExceptSuperAdmin(senderId)
-                .collectList()
-                .flatMap(usersList -> {
-                    List<FormattedUser> formattedUsers = usersList.stream()
-                            .map(user -> new FormattedUser(user.getId(), user.getUsername(), user.getRole()))
-                            .toList();
+        Mono<Authentication> authMono = request
+                .principal()
+                .doOnSuccess(auth -> log.info("Authenticated principal: {}", auth))
+                .doOnError(error -> log.error("Error retrieving principal: {}", error.getMessage(), error))
+                .cast(Authentication.class)
+                .switchIfEmpty(Mono.error(new UnauthorizedOperationException(-1L)));
 
-                    if ("csv".equalsIgnoreCase(format)) {
-                        String csv = formattedUsers.stream()
-                                .map(u -> String.format("%s,%s,%s",
-                                        safe(u.id()),
-                                        safe(u.username()),
-                                        safe(u.role())))
-                                .collect(Collectors.joining("\n", "id,username,role\n", ""));
-                        return ServerResponse.ok()
-                                .contentType(MediaType.valueOf("text/csv"))
-                                .bodyValue(csv);
-                    } else {
-                        UsersListResponse response = new UsersListResponse(
-                                HttpStatus.OK.value(),
-                                formattedUsers,
-                                formattedUsers.size(),
-                                Instant.now().toString()
-                        );
-                        return ServerResponse.ok()
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .bodyValue(response);
-                    }
+        return authMono
+                .flatMap(auth -> {
+                    Long senderId = Long.valueOf(auth.getName());
+                    return userService.getAllUsersExceptSuperAdmin(senderId)
+                            .collectList()
+                            .flatMap(usersList -> {
+                                List<FormattedUser> formattedUsers = usersList.stream()
+                                        .map(user -> new FormattedUser(user.getId(), user.getUsername(), user.getRole()))
+                                        .toList();
+
+                                if ("csv".equalsIgnoreCase(format)) {
+                                    String csv = formattedUsers.stream()
+                                            .map(u -> String.format("%s,%s,%s",
+                                                    safe(u.id()),
+                                                    safe(u.username()),
+                                                    safe(u.role())))
+                                            .collect(Collectors.joining("\n", "id,username,role\n", ""));
+                                    return ServerResponse.ok()
+                                            .contentType(MediaType.valueOf("text/csv"))
+                                            .bodyValue(csv);
+                                } else {
+                                    UsersListResponse response = new UsersListResponse(
+                                            HttpStatus.OK.value(),
+                                            formattedUsers,
+                                            formattedUsers.size(),
+                                            Instant.now().toString()
+                                    );
+                                    return ServerResponse.ok()
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .bodyValue(response);
+                                }
+                            });
                 })
                 .onErrorResume(SenderNotFoundException.class, e ->
                         ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString()))
-                )
+                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())))
                 .onErrorResume(UnauthorizedOperationException.class, e ->
                         ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString()))
-                );
+                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())))
+                .onErrorResume(Exception.class, e ->
+                        ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .bodyValue(HttpStatus.INTERNAL_SERVER_ERROR.value() + ": Unexpected error: " + e.getMessage()));
     }
 
     private String safe(String value) {
