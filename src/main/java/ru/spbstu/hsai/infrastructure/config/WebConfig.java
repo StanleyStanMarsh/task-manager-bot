@@ -2,7 +2,11 @@ package ru.spbstu.hsai.infrastructure.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
+import org.springframework.http.codec.ServerCodecConfigurer;
+import org.springframework.http.codec.json.Jackson2JsonDecoder;
+import org.springframework.http.codec.json.Jackson2JsonEncoder;
 import org.springframework.web.reactive.config.EnableWebFlux;
+import org.springframework.web.reactive.config.WebFluxConfigurer;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import ru.spbstu.hsai.infrastructure.server.BotProperties;
@@ -19,7 +23,13 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 @EnableWebFlux
 @PropertySource("classpath:application.properties")
 @PropertySource("classpath:telegram.properties")
-public class WebConfig {
+public class WebConfig implements WebFluxConfigurer {
+
+    @Override
+    public void configureHttpMessageCodecs(ServerCodecConfigurer configurer) {
+        configurer.defaultCodecs().jackson2JsonDecoder(new Jackson2JsonDecoder());
+        configurer.defaultCodecs().jackson2JsonEncoder(new Jackson2JsonEncoder());
+    }
 
     @Bean
     public ServerProperties serverProperties(

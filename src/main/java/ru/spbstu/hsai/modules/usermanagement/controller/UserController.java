@@ -1,22 +1,29 @@
 package ru.spbstu.hsai.modules.usermanagement.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.usermanagement.dto.FormattedUser;
+import ru.spbstu.hsai.modules.usermanagement.dto.PromoteRequest;
 import ru.spbstu.hsai.modules.usermanagement.exceptions.*;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Controller
 public class UserController {
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
     private final UserService userService;
 
     public UserController(UserService userService) {
@@ -24,67 +31,84 @@ public class UserController {
     }
 
     public Mono<ServerResponse> promote(ServerRequest request) {
-        Long senderId = Long.valueOf(request.queryParam("senderId")
-                .orElseThrow(() -> new IllegalArgumentException("senderId query parameter is required")));
-        Long targetId = Long.valueOf(request.pathVariable("telegramId"));
-        return userService.promoteToAdmin(senderId, targetId)
-                .then(
-                        ServerResponse.ok()
+        Mono<PromoteRequest> bodyMono = request
+                .bodyToMono(PromoteRequest.class)
+                .doOnSuccess(success -> log.info("Success after bodyToMono: {}", success))
+                .doOnError(error -> log.error("Error after bodyToMono: {}", error.getMessage(), error))
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Request body is required")));
+
+        Mono<Authentication> authMono = request
+                .principal()
+                .doOnSuccess(success -> log.info("Success after principal: {}", success))
+                .doOnError(error -> log.error("Error after principal: {}", error.getMessage(), error))
+                .cast(Authentication.class)
+                .switchIfEmpty(Mono.error(new UnauthorizedOperationException(-1L)));
+
+        return bodyMono
+                .flatMap(req -> authMono.flatMap(auth -> {
+                    Long senderId = Long.valueOf(auth.getName());
+                    Long targetId = Long.valueOf(request.pathVariable("telegramId"));
+                    log.info("Authenticated senderId={}, req={}", senderId, req);
+                    return userService.promoteToAdminWithPassword(senderId, targetId, req.getPassword());
+                }))
+                .then(ServerResponse.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(new BaseResponse(HttpStatus.OK.value(), Instant.now().toString())))
+                .onErrorResume(IllegalArgumentException.class, e ->
+                        ServerResponse.badRequest()
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.OK.value(), Instant.now().toString())), BaseResponse.class)
-                )
-                .onErrorResume(
-                        UnauthorizedOperationException.class,
-                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                                .bodyValue(new BaseResponse(HttpStatus.BAD_REQUEST.value(), Instant.now().toString())))
+                .onErrorResume(UnauthorizedOperationException.class, e ->
+                        ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
-                )
-                .onErrorResume(
-                        SenderNotFoundException.class,
-                        _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
+                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())))
+                .onErrorResume(SenderNotFoundException.class, e ->
+                        ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
-                )
-                .onErrorResume(
-                        TargetNotFoundException.class,
-                        _ -> ServerResponse.status(HttpStatus.NOT_FOUND)
+                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())))
+                .onErrorResume(TargetNotFoundException.class, e ->
+                        ServerResponse.status(HttpStatus.NOT_FOUND)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.NOT_FOUND.value(), Instant.now().toString())), BaseResponse.class)
-                )
-                .onErrorResume(
-                        AlreadyGrantedException.class,
-                        _ -> ServerResponse.status(HttpStatus.BAD_REQUEST)
+                                .bodyValue(new BaseResponse(HttpStatus.NOT_FOUND.value(), Instant.now().toString())))
+                .onErrorResume(AlreadyGrantedException.class, e ->
+                        ServerResponse.status(HttpStatus.CONFLICT)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.BAD_REQUEST.value(), Instant.now().toString())), BaseResponse.class)
-                );
+                                .bodyValue(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())))
+                .onErrorResume(ServerWebInputException.class, e ->
+                        ServerResponse.badRequest()
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .bodyValue(HttpStatus.BAD_REQUEST.value() + ": Invalid request body: " + e.getMessage()))
+                .onErrorResume(Exception.class, e ->
+                        ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .bodyValue(HttpStatus.INTERNAL_SERVER_ERROR.value() + ": Unexpected error: " + e.getMessage()));
     }
 
     public Mono<ServerResponse> selfDemote(ServerRequest request) {
-        Long senderId = Long.valueOf(request.queryParam("senderId")
-                .orElseThrow(() -> new IllegalArgumentException("senderId query parameter is required")));
-        return userService.selfDemoteToUser(senderId)
+        return request.principal()
+                .cast(Authentication.class)
+                .map(Authentication::getName)
+                .map(Long::valueOf)
+                .flatMap(userService::selfDemoteToUser)
                 .then(
                         ServerResponse.ok()
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.OK.value(), Instant.now().toString())), BaseResponse.class)
+                                .bodyValue(new BaseResponse(HttpStatus.OK.value(), Instant.now().toString()))
                 )
-                .onErrorResume(
-                        SenderNotFoundException.class,
+                .onErrorResume(SenderNotFoundException.class,
                         _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
+                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString()))
                 )
-                .onErrorResume(
-                        UnauthorizedOperationException.class,
+                .onErrorResume(UnauthorizedOperationException.class,
                         _ -> ServerResponse.status(HttpStatus.UNAUTHORIZED)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString())), BaseResponse.class)
+                                .bodyValue(new BaseResponse(HttpStatus.UNAUTHORIZED.value(), Instant.now().toString()))
                 )
-                .onErrorResume(
-                        SuperAdminDemoteException.class,
+                .onErrorResume(SuperAdminDemoteException.class,
                         _ -> ServerResponse.status(HttpStatus.CONFLICT)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(Mono.just(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString())), BaseResponse.class)
+                                .bodyValue(new BaseResponse(HttpStatus.CONFLICT.value(), Instant.now().toString()))
                 );
     }
 

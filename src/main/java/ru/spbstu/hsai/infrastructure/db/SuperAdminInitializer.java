@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import reactor.core.Disposable;
 import reactor.core.scheduler.Schedulers;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
@@ -16,6 +17,7 @@ public class SuperAdminInitializer {
     private static final Logger log = LoggerFactory.getLogger(SuperAdminInitializer.class);
 
     private final UserService userService;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${superadmin.telegramId}")
     private Long telegramId;
@@ -25,15 +27,19 @@ public class SuperAdminInitializer {
     private String firstName;
     @Value("${superadmin.lastName}")
     private String lastName;
+    @Value("${superadmin.password}")
+    private String rawPassword;
 
-    public SuperAdminInitializer(UserService userService) {
+    public SuperAdminInitializer(UserService userService,
+                                 PasswordEncoder passwordEncoder) {
         this.userService = userService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostConstruct
     public void init() {
-        // Запускаем в фоновом реактивном потоке, чтобы не блокировать старт контекста
-        Disposable d = userService.ensureSuperAdmin(telegramId, username, firstName, lastName)
+        String hashed = passwordEncoder.encode(rawPassword);
+        userService.ensureSuperAdmin(telegramId, username, firstName, lastName, hashed)
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(u -> log.info("Super-admin инициализирован: {}", u.getTelegramId()))
                 .doOnError(err -> log.error("Не удалось инициализировать super-admin: {}", err.getMessage()))
