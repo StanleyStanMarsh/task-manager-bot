@@ -186,7 +186,7 @@ public class NewTaskCommand implements TelegramCommand {
         ).subscribe(
                 task -> {
                     String successMessage = "✅Задача создана!\n" + task.toString() +
-                            "\nЕсли хотите вернуться к списку команд, используйте /help";;
+                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";;
                     SendMessage response = new SendMessage(chatId.toString(), successMessage);
                     response.enableHtml(true);
                     sender.sendAsync(response);
