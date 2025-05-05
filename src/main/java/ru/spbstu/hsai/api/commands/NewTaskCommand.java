@@ -129,7 +129,19 @@ public class NewTaskCommand implements TelegramCommand {
                                         "выбранного действия. Повторите ввод."));
                         return;
                     }
-                    state.setReminder(convertToReminderType(reminderChoice));
+
+                    SimpleTask.ReminderType reminder = convertToReminderType(reminderChoice);
+
+                    // Проверяем валидность напоминания
+                    if (reminder != SimpleTask.ReminderType.NO_REMINDER &&
+                            !isReminderValid(state.getDeadline(), reminder)) {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Нельзя установить напоминание на прошедшую дату. " +
+                                        "Пожалуйста, выберите другое напоминание."));
+                        return;
+                    }
+
+                    state.setReminder(reminder);
                     completeTaskCreation(chatId, state);
                     break;
             }
@@ -202,6 +214,20 @@ public class NewTaskCommand implements TelegramCommand {
             case 2 -> SimpleTask.ReminderType.ONE_DAY_BEFORE;
             case 3 -> SimpleTask.ReminderType.ONE_WEEK_BEFORE;
             default -> SimpleTask.ReminderType.NO_REMINDER;
+        };
+    }
+
+    private boolean isReminderValid(LocalDate deadline, SimpleTask.ReminderType reminder) {
+        LocalDate reminderDate = calculateReminderDate(deadline, reminder);
+        return reminderDate.isAfter(LocalDate.now());
+    }
+
+    private LocalDate calculateReminderDate(LocalDate deadline, SimpleTask.ReminderType reminder) {
+        return switch (reminder) {
+            case ONE_HOUR_BEFORE -> deadline; // Для часового напоминания проверяем сам дедлайн
+            case ONE_DAY_BEFORE -> deadline.minusDays(1);
+            case ONE_WEEK_BEFORE -> deadline.minusWeeks(1);
+            case NO_REMINDER -> deadline; // Для "без напоминания" проверка не нужна
         };
     }
 
