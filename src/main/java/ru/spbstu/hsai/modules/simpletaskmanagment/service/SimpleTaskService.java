@@ -48,6 +48,19 @@ public class SimpleTaskService {
         return taskRepository.findTasksByCustomDate(userId, date);
     }
 
+    // Удаление задачи
+    public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
+        return taskRepository.findById(taskId)
+                .flatMap(task -> {
+                    if (task.getUserId().equals(userId)) {
+                        return taskRepository.deleteById(taskId)
+                                .thenReturn(true);
+                    }
+                    return Mono.just(false);
+                })
+                .defaultIfEmpty(false);
+    }
+
     // Пометка задачи как выполненной
     public Mono<SimpleTask> markAsCompleted(String taskId) {
         return taskRepository.findById(taskId)
