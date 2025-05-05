@@ -43,7 +43,8 @@ public class TodayCommand implements TelegramCommand{
                 .subscribe(tasks -> {
                     if (tasks.isEmpty()) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "⚡ У вас нет задач на сегодня! Отдыхайте😌"));
+                                "⚡ У вас нет задач на сегодня! Отдыхайте😌\n\n" +
+                                        "Если хотите вернуться к списку команд, используйте /help"));
                     } else {
                         StringBuilder response = new StringBuilder("📋 Ваши задачи на сегодня:\n\n");
                         int counter = 1;

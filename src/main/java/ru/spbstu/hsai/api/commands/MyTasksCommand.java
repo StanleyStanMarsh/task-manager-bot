@@ -41,7 +41,8 @@ public class MyTasksCommand implements TelegramCommand {
                 .collectList()
                 .subscribe(tasks -> {
                     if (tasks.isEmpty()) {
-                        sender.sendAsync(new SendMessage(chatId.toString(), "⚡ У вас нет активных задач!"));
+                        sender.sendAsync(new SendMessage(chatId.toString(), "⚡ У вас нет активных задач!\n\n"+
+                                "Если хотите вернуться к списку команд, используйте /help"));
                     } else {
                         StringBuilder response = new StringBuilder("📋 Ваши активные задачи:\n\n");
                         int counter = 1;

@@ -47,7 +47,8 @@ public class WeekCommand implements TelegramCommand {
                 .subscribe(tasks -> {
                     if (tasks.isEmpty()) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "⚡ У вас нет задач на текущую неделю!"));
+                                "⚡ У вас нет задач на текущую неделю!\n\n"+
+                                        "Если хотите вернуться к списку команд, используйте /help"));
                     } else {
                         LocalDate start = LocalDate.now().with(DayOfWeek.MONDAY);
                         LocalDate end = start.plusDays(6);
