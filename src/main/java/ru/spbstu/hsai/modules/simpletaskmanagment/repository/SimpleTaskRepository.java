@@ -1,5 +1,6 @@
 package ru.spbstu.hsai.modules.simpletaskmanagment.repository;
 
+import org.springframework.data.mongodb.repository.DeleteQuery;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
@@ -27,7 +28,8 @@ public interface SimpleTaskRepository extends ReactiveMongoRepository<SimpleTask
     Flux<SimpleTask> findTasksByCustomDate(String userId, LocalDate date);
 
     // Для /deletetask
-    Mono<Boolean> deleteByIdAndUserId(String id, String userId);
+    @DeleteQuery("{ '_id': ?0, 'userId': ?1 }")
+    Mono<Long> deleteByIdAndUserId(String id, String userId);
 
     // Для поиска просроченных задач (мб можно будет использовать для напоминаний)
     //@Query("{ 'userId': ?0, 'deadline': { $lt: ?1 }, 'isCompleted': false }")

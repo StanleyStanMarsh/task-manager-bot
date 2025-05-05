@@ -49,6 +49,7 @@ public class SimpleTaskService {
     }
 
     // Удаление задачи
+    /*
     public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
         return taskRepository.findById(taskId)
                 .flatMap(task -> {
@@ -59,7 +60,14 @@ public class SimpleTaskService {
                     return Mono.just(false);
                 })
                 .defaultIfEmpty(false);
+    }*/
+
+    // Удаление задачи
+    public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
+        return taskRepository.deleteByIdAndUserId(taskId, userId)
+                .map(deletedCount -> deletedCount > 0);
     }
+
 
     // Пометка задачи как выполненной
     public Mono<SimpleTask> markAsCompleted(String taskId) {
