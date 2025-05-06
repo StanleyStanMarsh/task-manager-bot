@@ -6,6 +6,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.api.commands.utils.TaskValidation;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateContext;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateState;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateStep;
@@ -16,9 +17,6 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-
 
 @Component
 public class UpdateTaskCommand implements TelegramCommand {
@@ -122,7 +120,8 @@ public class UpdateTaskCommand implements TelegramCommand {
                     int choice = Integer.parseInt(input);
                     if (choice < 1 || choice > 6) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Введите целое число в диапазоне от 1 до 6 в зависимости от выбранного действия. Повторите ввод."));
+                                "❌ Введите целое число в диапазоне от 1 до 6 в " +
+                                        "зависимости от выбранного действия. Повторите ввод."));
                         return;
                     }
 
@@ -174,7 +173,7 @@ public class UpdateTaskCommand implements TelegramCommand {
                     break;
 
                 case NEW_DEADLINE:
-                    LocalDate deadline = parseDate(input);
+                    LocalDate deadline = TaskValidation.parseDate(input);
                     if (deadline == null || deadline.isBefore(LocalDate.now())) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
                                 "❌ Укажите дедлайн задачи в формате дд.мм.гггг не ранее текущей даты. " +
@@ -193,7 +192,7 @@ public class UpdateTaskCommand implements TelegramCommand {
                                         "выбранного действия. Повторите ввод."));
                         return;
                     }
-                    SimpleTask.ReminderType reminder = convertToReminderType(reminderChoice);
+                    SimpleTask.ReminderType reminder = TaskValidation.convertToReminderType(reminderChoice);
 
                     // Проверяем валидность напоминания
                     // Получаем дедлайн (либо из состояния, либо из БД)
@@ -204,7 +203,7 @@ public class UpdateTaskCommand implements TelegramCommand {
 
                     deadlineMono.subscribe(taskdeadline -> {
                                 if (reminder != SimpleTask.ReminderType.NO_REMINDER) {
-                                    if (!isReminderValid(taskdeadline, reminder)) {
+                                    if (!TaskValidation.isReminderValid(taskdeadline, reminder)) {
                                         sender.sendAsync(new SendMessage(chatId.toString(),
                                                 "❌ Нельзя установить напоминание на прошедшую дату"+
                                                 "Пожалуйста, выберите другое напоминание."));
@@ -249,36 +248,6 @@ public class UpdateTaskCommand implements TelegramCommand {
         sender.sendAsync(new SendMessage(chatId.toString(), "❗ Редактирование задачи отменено!"));
     }
 
-    private LocalDate parseDate(String input) {
-        try {
-            return LocalDate.parse(input, DateTimeFormatter.ofPattern("dd.MM.yyyy"));
-        } catch (DateTimeParseException e) {
-            return null;
-        }
-    }
-
-    private SimpleTask.ReminderType convertToReminderType(int choice) {
-        return switch (choice) {
-            case 1 -> SimpleTask.ReminderType.ONE_HOUR_BEFORE;
-            case 2 -> SimpleTask.ReminderType.ONE_DAY_BEFORE;
-            case 3 -> SimpleTask.ReminderType.ONE_WEEK_BEFORE;
-            default -> SimpleTask.ReminderType.NO_REMINDER;
-        };
-    }
-
-    private boolean isReminderValid(LocalDate deadline, SimpleTask.ReminderType reminder) {
-        LocalDate reminderDate = calculateReminderDate(deadline, reminder);
-        return reminderDate.isAfter(LocalDate.now());
-    }
-
-    private LocalDate calculateReminderDate(LocalDate deadline, SimpleTask.ReminderType reminder) {
-        return switch (reminder) {
-            case ONE_HOUR_BEFORE -> deadline; // Для часового напоминания проверяем сам дедлайн
-            case ONE_DAY_BEFORE -> deadline.minusDays(1);
-            case ONE_WEEK_BEFORE -> deadline.minusWeeks(1);
-            case NO_REMINDER -> deadline; // Для "без напоминания" проверка не нужна
-        };
-    }
 
     private void completeTaskUpdate(Long chatId, SimpleTaskUpdateState state, boolean markAsCompleted) {
         Mono<SimpleTask> updateMono;
