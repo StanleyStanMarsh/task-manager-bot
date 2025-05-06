@@ -6,8 +6,8 @@ import ru.spbstu.hsai.modules.notification.service.NotificationService;
 
 import java.time.Duration;
 import javax.annotation.PostConstruct;
-@Component
 
+@Component
 public class SchedulerComponent {
     private final NotificationService notificationService;
 

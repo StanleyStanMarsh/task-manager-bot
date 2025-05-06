@@ -12,13 +12,19 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Service
 public class NotificationService {
     private final UserService userService;
     private final TelegramNotifySender notifySender;
     private final SimpleTaskService taskService;
-
+    private static final List<String> SUPPORTED_ZONES = List.of(
+            "Europe/Kaliningrad", "Europe/Moscow", "Europe/Samara",
+            "Asia/Yekaterinburg", "Asia/Omsk", "Asia/Krasnoyarsk",
+            "Asia/Irkutsk", "Asia/Yakutsk", "Asia/Vladivostok",
+            "Asia/Magadan", "Asia/Kamchatka"
+    );
 
 
     public NotificationService(
@@ -32,6 +38,14 @@ public class NotificationService {
     public void checkAndNotify() {
         Instant nowUtc = Instant.now();
 
+        boolean anyZoneMatches = SUPPORTED_ZONES.stream()
+                .map(ZoneId::of)
+                .map(zone -> ZonedDateTime.ofInstant(nowUtc, zone))
+                .anyMatch(time -> (time.getHour() == 0 || time.getHour() == 23) && time.getMinute() == 0);
+
+        if (!anyZoneMatches) {
+            return; // Ничего не делаем, если ни в одном нужном поясе не 12:00 или 23:00
+        }
         // Сначала отправляем уведомления о напоминаниях
         Flux<Void> reminderNotifications = taskService.getTasksForTenDays()
                 .filter(task ->  task.getReminder() != SimpleTask.ReminderType.NO_REMINDER)
