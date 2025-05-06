@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationContext;
 import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationState;
 import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationStep;
@@ -176,6 +177,7 @@ public class NewTaskCommand implements TelegramCommand {
         sender.sendAsync(new SendMessage(chatId.toString(), message));
     }
 
+
     private void completeTaskCreation(Long chatId, SimpleTaskCreationState state) {
         taskService.createTask(
                 state.getUserId(),
@@ -186,19 +188,30 @@ public class NewTaskCommand implements TelegramCommand {
         ).subscribe(
                 task -> {
                     String successMessage = "✅Задача создана!\n" + task.toString() +
-                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";;
+                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";
                     SendMessage response = new SendMessage(chatId.toString(), successMessage);
                     response.enableHtml(true);
                     sender.sendAsync(response);
                     creationContext.complete(chatId);
                 },
                 error -> {
-                    sender.sendAsync(new SendMessage(chatId.toString(),
-                            "❌ Ошибка при создании задачи: " + error.getMessage()));
+                    String errorMessage;
+                    if (error.getMessage() != null && error.getMessage().startsWith("EXISTING_TASK:")) {
+                        String taskInfo = error.getMessage().substring("EXISTING_TASK:".length());
+                        errorMessage = "❌ Эта задача уже существует в вашем списке:\n\n" + taskInfo +
+                                "\n\nЕсли хотите вернуться к списку команд, используйте /help";;
+                    } else {
+                        errorMessage = "❌ Ошибка при создании задачи: " + error.getMessage();
+                    }
+
+                    SendMessage response = new SendMessage(chatId.toString(), errorMessage);
+                    response.enableHtml(true);
+                    sender.sendAsync(response);
                     creationContext.complete(chatId);
                 }
         );
     }
+
 
     private LocalDate parseDate(String input) {
         try {

@@ -31,6 +31,13 @@ public interface SimpleTaskRepository extends ReactiveMongoRepository<SimpleTask
     @DeleteQuery("{ '_id': ?0, 'userId': ?1 }")
     Mono<Long> deleteByIdAndUserId(String id, String userId);
 
+
+    // Для поиска задачи
+    @Query("{ 'userId': ?0, 'description': ?1, 'complexity': ?2, 'deadline': ?3, 'reminder': ?4 }")
+    Mono<SimpleTask> findTask(String userId, String description, int complexity,
+                                       LocalDate deadline, SimpleTask.ReminderType reminder);
+
+
     // Для поиска просроченных задач (мб можно будет использовать для напоминаний)
     //@Query("{ 'userId': ?0, 'deadline': { $lt: ?1 }, 'isCompleted': false }")
     //Flux<SimpleTask> findOverdueTasks(String userId, LocalDate currentDate);

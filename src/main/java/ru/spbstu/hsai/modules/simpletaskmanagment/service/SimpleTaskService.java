@@ -17,12 +17,17 @@ public class SimpleTaskService {
         this.taskRepository = taskRepository;
     }
 
-    // Создание задачи
+    // Создание задачи с проверкой на дубликаты
     public Mono<SimpleTask> createTask(String userId, String description,
                                        int complexity, LocalDate deadline,
                                        SimpleTask.ReminderType reminder) {
-        SimpleTask task = new SimpleTask(userId, description, complexity, deadline, reminder);
-        return taskRepository.save(task);
+        return findDuplicateTask(userId, description, complexity, deadline, reminder)
+                .flatMap(existingTask -> Mono.<SimpleTask>error(new RuntimeException("EXISTING_TASK:" +
+                        existingTask.toString())))
+                .switchIfEmpty(Mono.defer(() -> {
+                    SimpleTask task = new SimpleTask(userId, description, complexity, deadline, reminder);
+                    return taskRepository.save(task);
+                }));
     }
 
     // Получение активных задач пользователя
@@ -48,24 +53,18 @@ public class SimpleTaskService {
         return taskRepository.findTasksByCustomDate(userId, date);
     }
 
-    // Удаление задачи
-    /*
-    public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
-        return taskRepository.findById(taskId)
-                .flatMap(task -> {
-                    if (task.getUserId().equals(userId)) {
-                        return taskRepository.deleteById(taskId)
-                                .thenReturn(true);
-                    }
-                    return Mono.just(false);
-                })
-                .defaultIfEmpty(false);
-    }*/
 
     // Удаление задачи
     public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
         return taskRepository.deleteByIdAndUserId(taskId, userId)
                 .map(deletedCount -> deletedCount > 0);
+    }
+
+
+    public Mono<SimpleTask> findDuplicateTask(String userId, String description,
+                                              int complexity, LocalDate deadline,
+                                              SimpleTask.ReminderType reminder) {
+        return taskRepository.findTask(userId, description, complexity, deadline, reminder);
     }
 
 
