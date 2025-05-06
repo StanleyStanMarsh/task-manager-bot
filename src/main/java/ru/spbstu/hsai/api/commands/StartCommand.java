@@ -1,5 +1,6 @@
 package ru.spbstu.hsai.api.commands;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -15,10 +16,13 @@ public class StartCommand implements TelegramCommand {
 
     private final TelegramSenderService sender;
     private final UserService userService;
+    private final TimezoneCommand timezoneCommand;
 
-    public StartCommand(TelegramSenderService sender, UserService userService) {
+    @Autowired
+    public StartCommand(TelegramSenderService sender, UserService userService, TimezoneCommand timezoneCommand) {
         this.sender = sender;
         this.userService = userService;
+        this.timezoneCommand = timezoneCommand;
     }
 
     @Override
@@ -31,34 +35,36 @@ public class StartCommand implements TelegramCommand {
         Message message = event.getUpdate().getMessage();
         User tgUser = message.getFrom();
 
-        // Создаем реактивный SendMessage
-        Mono<SendMessage> sendMessageMono = Mono.just(SendMessage.builder()
-                .chatId(tgUser.getId())
-                .text(String.format(
-                        """
-                        🎉 Добро пожаловать, %s! 🎉
-                        Этот Бот поможет тебе управлять задачами и не забывать о них!
-                        Используйте /help, чтобы ознакомиться со списком команд.
-                        """,
-                        tgUser.getUserName()
-                ))
-                .build());
-        System.out.println("Starting message creation");
-
-        // Реактивно отправляем сообщение и сохраняем пользователя
-        sendMessageMono
-                .flatMap(sm -> {
-                    System.out.println("Sending message for chatId=" + tgUser.getId());
-                    return Mono.fromCompletionStage(sender.sendAsync(sm));
-                })
-                .then(userService.registerIfAbsent(
+        // Регистрация пользователя
+        userService.registerIfAbsent(
                         tgUser.getId(),
                         tgUser.getUserName(),
                         tgUser.getFirstName(),
                         tgUser.getLastName()
-                ))
-                .doOnSuccess(v -> System.out.println("Registration completed"))
-                .doOnError(e -> System.out.println("Error: " + e.getMessage()))
-                .subscribe(); // Fire-and-forget для всей цепочки
+                )
+                .then(Mono.just(SendMessage.builder()
+                        .chatId(tgUser.getId())
+                        .text("""
+                      Пожалуйста, выберите ваш часовой пояс из списка ниже и отправьте его название (например, МСК):
+                      - МСК-1 (калининградское время)
+                      - МСК   (московское время)
+                      - МСК+1 (самарское время)
+                      - МСК+2 (екатеринбургское время)
+                      - МСК+3 (омское время)
+                      - МСК+4 (красноярское время)
+                      - МСК+5 (иркутское время)
+                      - МСК+6 (якутское время)
+                      - МСК+7 (владивостокское время)
+                      - МСК+8 (магаданское время)
+                      - МСК+9 (камчатское время)
+                      """)
+                        .build()))
+                .flatMap(sm -> Mono.fromCompletionStage(sender.sendAsync(sm)))
+                .doOnSuccess(v -> {
+                    timezoneCommand.addAwaitingTimezoneUser(tgUser.getId());
+                    System.out.println("Timezone prompt sent and user added to awaiting list for chatId=" + tgUser.getId());
+                })
+                .doOnError(e -> System.out.println("Error sending timezone prompt: " + e.getMessage()))
+                .subscribe();
     }
 }
