@@ -16,6 +16,7 @@ public class User {
     private String firstName;  // может отсутствовать
     private String lastName;  // может отсутствовать
     private String role = "USER"; // значение по умолчанию
+    private String timezone; // новое поле для часового пояса
 
     // Конструкторы
     public User() {}
@@ -63,9 +64,17 @@ public class User {
         this.role = role;
     }
 
+    //для напоминаний
+    public String getTimezone() {
+        return timezone;
+    }
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
     @Override
     public String toString() {
-        return "User{id='" + id + "', telegramId=" + telegramId + ", role='" + role + "', username='" + username + "'}";
+        return "User{id='" + id + "', telegramId=" + telegramId + ", role='" + role + "', username='" + username + "', timezone='" + timezone + "'}";
     }
 }
 

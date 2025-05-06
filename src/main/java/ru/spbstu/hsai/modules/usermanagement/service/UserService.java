@@ -51,7 +51,7 @@ public class UserService {
                 .switchIfEmpty(Mono.defer(() -> {
                     System.out.println("Creating new user with telegramId=" + telegramId);
                     User user = new User(telegramId, "USER");
-                    setUserFields(user, username, firstName, lastName); // Устанавливаем поля сразу
+                    setUserFields(user, username, firstName, lastName, null); // Устанавливаем поля сразу
                     return userRepository.save(user)
                             .doOnSuccess(savedUser -> System.out.println("New user registered: telegramId=" + savedUser.getTelegramId()))
                             .doOnError(e -> System.out.println("Failed to register: " + e.getMessage()))
@@ -59,9 +59,9 @@ public class UserService {
                 }))
                 .flatMap(user -> {
                     System.out.println("Entering flatMap for telegramId=" + telegramId);
-                    if (needUpdate(user, username, firstName, lastName)) {
+                    if (needUpdate(user, username, firstName, lastName, null)) {
                         System.out.println("Updating user with telegramId=" + telegramId);
-                        setUserFields(user, username, firstName, lastName);
+                        setUserFields(user, username, firstName, lastName, null);
                         return userRepository.save(user)
                                 .doOnSuccess(savedUser -> System.out.println("User updated: telegramId=" + savedUser.getTelegramId()))
                                 .doOnError(e -> System.out.println("Failed to update: " + e.getMessage()))
@@ -72,6 +72,16 @@ public class UserService {
                     }
                 })
                 .then(); // Убеждаемся, что возвращается Mono<Void>
+    }
+
+
+    public Mono<Void> updateTimezone(Long telegramId, String timezone) {
+        return userRepository.findByTelegramId(telegramId)
+                .switchIfEmpty(Mono.error(new SenderNotFoundException(telegramId)))
+                .flatMap(user -> {
+                    user.setTimezone(timezone);
+                    return userRepository.save(user).then();
+                });
     }
 
     public Mono<User> ensureSuperAdmin(Long telegramId, String username, String firstName, String lastName) {
@@ -89,17 +99,19 @@ public class UserService {
                 }));
     }
 
-    private void setUserFields(User user, String username, String firstName, String lastName) {
+    private void setUserFields(User user, String username, String firstName, String lastName, String timezone) {
         if (username != null) user.setUsername(username);
         if (firstName != null) user.setFirstName(firstName);
         if (lastName != null) user.setLastName(lastName);
+        if (timezone != null) user.setTimezone(timezone);
     }
 
-    private boolean needUpdate(User user, String username, String firstName, String lastName) {
-        System.out.println("Checking update: username=" + username + ", firstName=" + firstName + ", lastName=" + lastName);
+    private boolean needUpdate(User user, String username, String firstName, String lastName, String timezone) {
+        System.out.println("Checking update: username=" + username + ", firstName=" + firstName + ", lastName=" + lastName + ", timezone=" + timezone);
         return (username != null && !username.equals(user.getUsername())) ||
                 (firstName != null && !firstName.equals(user.getFirstName())) ||
-                (lastName != null && !lastName.equals(user.getLastName()));
+                (lastName != null && !lastName.equals(user.getLastName())) ||
+                (timezone != null && !timezone.equals(user.getTimezone()));
     }
 
     public Mono<Void> promoteToAdmin(Long senderId, Long targetId) {
@@ -168,5 +180,8 @@ public class UserService {
                     Long superId = Long.parseLong(superAdminId);
                     return userRepository.findByTelegramIdNot(superId);
                 });
+    }
+    public Mono<User> findById(String id) {
+        return userRepository.findById(id);
     }
 }
