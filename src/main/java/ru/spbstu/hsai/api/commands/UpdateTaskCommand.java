@@ -205,8 +205,8 @@ public class UpdateTaskCommand implements TelegramCommand {
                                 if (reminder != SimpleTask.ReminderType.NO_REMINDER) {
                                     if (!TaskValidation.isReminderValid(taskdeadline, reminder)) {
                                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                                "❌ Нельзя установить напоминание на прошедшую дату"+
-                                                "Пожалуйста, выберите другое напоминание."));
+                                                "❌ Нельзя установить напоминание на прошедшую дату. " +
+                                                        "Пожалуйста, выберите другое напоминание."));
                                         return;
                                     }
                                 }
@@ -245,7 +245,8 @@ public class UpdateTaskCommand implements TelegramCommand {
 
     private void cancelTaskUpdate(Long chatId) {
         updateContext.complete(chatId);
-        sender.sendAsync(new SendMessage(chatId.toString(), "❗ Редактирование задачи отменено!"));
+        sender.sendAsync(new SendMessage(chatId.toString(), "❗ Редактирование задачи отменено!"+
+                "\n\nЕсли хотите вернуться к списку команд, используйте /help"));
     }
 
 
@@ -269,7 +270,8 @@ public class UpdateTaskCommand implements TelegramCommand {
         updateMono.subscribe(
                 task -> {
                     String successMessage = markAsCompleted ?
-                            "✅ Задача выполнена!" : "🌟 Задача успешно изменена!";
+                            "✅ Задача выполнена!" : "🌟 Задача успешно изменена!" +
+                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";;
                     sender.sendAsync(new SendMessage(chatId.toString(), successMessage));
                     updateContext.complete(chatId);
                 },
