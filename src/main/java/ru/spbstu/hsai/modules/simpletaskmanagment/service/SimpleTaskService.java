@@ -48,6 +48,23 @@ public class SimpleTaskService {
         return taskRepository.findTasksByCustomDate(userId, date);
     }
 
+
+    // Задачи для просроченных дедлайнов
+    public Flux<SimpleTask> getOverdueTasks() {
+        LocalDate start = LocalDate.now().minusDays(1);
+        LocalDate end = LocalDate.now();
+        return taskRepository.findOverdueTasks(start, end);
+    }
+
+    // Задачи для напоминаний
+    public Flux<SimpleTask> getTasksForTenDays() {
+        LocalDate start = LocalDate.now();
+        LocalDate end = start.plusDays(10);
+        return taskRepository.findTasksForTenDays(start, end);
+    }
+
+
+
     // Пометка задачи как выполненной
     public Mono<SimpleTask> markAsCompleted(String taskId) {
         return taskRepository.findById(taskId)
