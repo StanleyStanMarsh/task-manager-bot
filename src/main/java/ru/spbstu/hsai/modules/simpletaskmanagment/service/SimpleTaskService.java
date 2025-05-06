@@ -61,6 +61,7 @@ public class SimpleTaskService {
     }
 
 
+    // Поиск существующей задачи у пользователя
     public Mono<SimpleTask> findDuplicateTask(String userId, String description,
                                               int complexity, LocalDate deadline,
                                               SimpleTask.ReminderType reminder) {
@@ -68,9 +69,55 @@ public class SimpleTaskService {
     }
 
 
-    // Пометка задачи как выполненной
-    public Mono<SimpleTask> markAsCompleted(String taskId) {
-        return taskRepository.findById(taskId)
+    // Поиск задачи по ее id и id пользователя
+    public Mono<SimpleTask> findTaskByIdAndUser(String taskId, String userId) {
+        return taskRepository.findByIdAndUserId(taskId, userId);
+    }
+
+    public Mono<Boolean> taskExistsAndBelongsToUser(String taskId, String userId) {
+        return taskRepository.findByIdAndUserId(taskId, userId).hasElement();
+    }
+
+    // Обновляем описание задачи
+    public Mono<SimpleTask> updateTaskDescription(String taskId, String userId, String newDescription) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setDescription(newDescription);
+                    return taskRepository.save(task);
+                });
+    }
+
+    // Обновляем сложность
+    public Mono<SimpleTask> updateTaskComplexity(String taskId, String userId, Integer newComplexity) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setComplexity(newComplexity);
+                    return taskRepository.save(task);
+                });
+    }
+
+    // Обновляем дедлайн
+    public Mono<SimpleTask> updateTaskDeadline(String taskId, String userId, LocalDate newDeadline) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setDeadline(newDeadline);
+                    return taskRepository.save(task);
+                });
+    }
+
+    // Обновляем напоминание
+    public Mono<SimpleTask> updateTaskReminder(String taskId, String userId, SimpleTask.ReminderType newReminder) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setReminder(newReminder);
+                    return taskRepository.save(task);
+                });
+    }
+
+
+    // Помечаем задачу как завершенную
+    public Mono<SimpleTask> markAsCompleted(String taskId, String userId) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
                 .flatMap(task -> {
                     task.setCompleted(true);
                     return taskRepository.save(task);

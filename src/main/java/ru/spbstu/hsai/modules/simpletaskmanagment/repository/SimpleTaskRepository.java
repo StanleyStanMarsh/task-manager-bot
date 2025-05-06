@@ -32,10 +32,15 @@ public interface SimpleTaskRepository extends ReactiveMongoRepository<SimpleTask
     Mono<Long> deleteByIdAndUserId(String id, String userId);
 
 
-    // Для поиска задачи
+    // Для поиска существующей задачи
     @Query("{ 'userId': ?0, 'description': ?1, 'complexity': ?2, 'deadline': ?3, 'reminder': ?4 }")
     Mono<SimpleTask> findTask(String userId, String description, int complexity,
                                        LocalDate deadline, SimpleTask.ReminderType reminder);
+
+
+    // Для поиска задачи по ID и пользователю
+    @Query("{ '_id': ?0, 'userId': ?1 }")
+    Mono<SimpleTask> findByIdAndUserId(String taskId, String userId);
 
 
     // Для поиска просроченных задач (мб можно будет использовать для напоминаний)
