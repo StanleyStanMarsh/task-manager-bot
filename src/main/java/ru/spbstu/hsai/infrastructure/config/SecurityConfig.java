@@ -3,6 +3,7 @@ package ru.spbstu.hsai.infrastructure.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
@@ -38,13 +39,16 @@ public class SecurityConfig {
                         .anyExchange().permitAll()
                 )
                 .csrf(csrf -> csrf.disable())
-                .httpBasic(httpBasic -> httpBasic.authenticationEntryPoint((exchange, ex) -> {
-                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                    exchange.getResponse().getHeaders().setContentType(MediaType.TEXT_PLAIN);
-                    return exchange.getResponse().writeWith(
-                            Mono.just(exchange.getResponse().bufferFactory()
-                                    .wrap("Access Denied".getBytes())));
-                }))
+                .httpBasic(httpBasic -> httpBasic
+                        .authenticationEntryPoint((exchange, ex) -> {
+                            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                            exchange.getResponse().getHeaders().add(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=\"Access to API\"");
+                            exchange.getResponse().getHeaders().setContentType(MediaType.TEXT_PLAIN);
+                            return exchange.getResponse().writeWith(
+                                    Mono.just(exchange.getResponse().bufferFactory().wrap("Access Denied".getBytes()))
+                            );
+                        })
+                )
                 .build();
     }
 
