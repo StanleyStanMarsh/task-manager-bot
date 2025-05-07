@@ -7,16 +7,22 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.commands.utils.TaskValidation;
+import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateContext;
+import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateState;
+import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateStep;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateContext;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateState;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateStep;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Component
 public class UpdateTaskCommand implements TelegramCommand {
@@ -24,15 +30,21 @@ public class UpdateTaskCommand implements TelegramCommand {
     private final UserService userService;
     private final SimpleTaskService taskService;
     private final SimpleTaskUpdateContext updateContext;
+    private final RepeatingTaskService repeatingTaskService;
+    private final RepeatingTaskUpdateContext repeatingTaskUpdateContext;
 
     public UpdateTaskCommand(TelegramSenderService sender,
                              UserService userService,
                              SimpleTaskService taskService,
-                             SimpleTaskUpdateContext updateContext) {
+                             SimpleTaskUpdateContext updateContext,
+                             RepeatingTaskService repeatingTaskService,
+                             RepeatingTaskUpdateContext repeatingTaskUpdateContext) {
         this.sender = sender;
         this.userService = userService;
         this.taskService = taskService;
         this.updateContext = updateContext;
+        this.repeatingTaskService = repeatingTaskService;
+        this.repeatingTaskUpdateContext = repeatingTaskUpdateContext;
     }
 
     @Override
@@ -50,6 +62,8 @@ public class UpdateTaskCommand implements TelegramCommand {
         Long chatId = message.getChatId();
         if (updateContext.hasActiveSession(chatId)) {
             processUserInput(chatId, message.getText());
+        } else if (repeatingTaskUpdateContext.hasActiveSession(chatId)) {
+            processUserInputForRepeatingTasks(chatId, message.getText());
         }
     }
 
@@ -70,26 +84,30 @@ public class UpdateTaskCommand implements TelegramCommand {
         }
 
         userService.findByTelegramId(tgUser.getId())
-                .flatMap(user -> taskService.taskExistsAndBelongsToUser(taskId, user.getId()))
-                .subscribe(
-                        exists -> {
-                            if (exists) {
-                                userService.findByTelegramId(tgUser.getId())
-                                        .subscribe(user -> {
-                                            updateContext.startUpdate(chatId, taskId, user.getId());
-                                            askWhatToUpdate(chatId);
+                .flatMap(user -> {
+                    // Проверяем сначала SimpleTask
+                    return taskService.taskExistsAndBelongsToUser(taskId, user.getId())
+                            .flatMap(isSimpleTask -> {
+                                if (isSimpleTask) {
+                                    updateContext.startUpdate(chatId, taskId, user.getId());
+                                    askWhatToUpdate(chatId);
+                                    return Mono.just(true);
+                                }
+                                // Если не SimpleTask, проверяем RepeatingTask
+                                return repeatingTaskService.taskExistsAndBelongsToUser(taskId, user.getId())
+                                        .doOnNext(isRepeatingTask -> {
+                                            if (isRepeatingTask) {
+                                                repeatingTaskUpdateContext.startUpdate(chatId, taskId, user.getId());
+                                                askWhatToUpdateForRepeatingTask(chatId);
+                                            } else {
+                                                sender.sendAsync(new SendMessage(chatId.toString(),
+                                                        "❌ Задача с ID " + taskId + " не найдена или не принадлежит вам.\n" +
+                                                                "Проверьте корректность ввода и попробуйте снова."));
+                                            }
                                         });
-                            } else {
-                                sender.sendAsync(new SendMessage(chatId.toString(),
-                                        "❌ Задача с ID " + taskId + " не найдена или не принадлежит вам.\n" +
-                                                "Проверьте корректность ввода и попробуйте снова."));
-                            }
-                        },
-                        error -> {
-                            sender.sendAsync(new SendMessage(chatId.toString(),
-                                    "❌ Ошибка при проверке задачи: " + error.getMessage()));
-                        }
-                );
+                            });
+                })
+                .subscribe();
 
     }
 
@@ -110,6 +128,21 @@ public class UpdateTaskCommand implements TelegramCommand {
 
     }
 
+    private void askWhatToUpdateForRepeatingTask(Long chatId) {
+        String message = "🤔 Что вы хотите изменить?\n" +
+                "1. Описание\n" +
+                "2. Сложность\n" +
+                "3. Периодичность\n" +
+                "4. Дату и время начала задачи\n" +
+                "5. Отмена";
+
+        RepeatingTaskUpdateState state = repeatingTaskUpdateContext.getState(chatId);
+        state.setCurrentStep(RepeatingTaskUpdateStep.SELECT_FIELD);
+        repeatingTaskUpdateContext.updateState(chatId, state);
+
+        sender.sendAsync(new SendMessage(chatId.toString(), message));
+
+    }
 
     private void processUserInput(Long chatId, String input) {
         SimpleTaskUpdateState state = updateContext.getState(chatId);
@@ -283,5 +316,153 @@ public class UpdateTaskCommand implements TelegramCommand {
         );
     }
 
-}
+    private void processUserInputForRepeatingTasks(Long chatId, String input) {
+        RepeatingTaskUpdateState state = repeatingTaskUpdateContext.getState(chatId);
 
+        try {
+            switch (state.getCurrentStep()) {
+                case SELECT_FIELD:
+                    int choice = Integer.parseInt(input);
+                    if (choice < 1 || choice > 5) {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Введите целое число в диапазоне от 1 до 5 в " +
+                                        "зависимости от выбранного действия. Повторите ввод."));
+                        return;
+                    }
+
+                    switch (choice) {
+                        case 1:
+                            state.setCurrentStep(RepeatingTaskUpdateStep.NEW_DESCRIPTION);
+                            askForNewDescription(chatId);
+                            break;
+                        case 2:
+                            state.setCurrentStep(RepeatingTaskUpdateStep.NEW_COMPLEXITY);
+                            askForNewComplexity(chatId);
+                            break;
+                        case 3:
+                            state.setCurrentStep(RepeatingTaskUpdateStep.NEW_FREQUENCY);
+                            askForNewFrequency(chatId);
+                            break;
+                        case 4:
+                            state.setCurrentStep(RepeatingTaskUpdateStep.NEW_START_DATE);
+                            askForNewStartDate(chatId);
+                            break;
+                        case 5:
+                            cancelTaskUpdateRepeatingTask(chatId);
+                            break;
+                    }
+                    break;
+
+                case NEW_DESCRIPTION:
+                    if (input.length() > 200) {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Описание задачи не должно превышать 200 символов. Повторите ввод."));
+                        return;
+                    }
+                    state.setDescription(input);
+                    completeRepeatingTaskUpdate(chatId, state);
+                    break;
+
+                case NEW_COMPLEXITY:
+                    int complexity = Integer.parseInt(input);
+                    if (complexity < 1 || complexity > 5) {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Оцените сложность задачи, введя целое число в диапазоне от 1 до 5. Повторите ввод."));
+                        return;
+                    }
+                    state.setComplexity(complexity);
+                    completeRepeatingTaskUpdate(chatId, state);
+                    break;
+
+                case NEW_FREQUENCY:
+                    int frequencyChoice = Integer.parseInt(input);
+                    if (frequencyChoice < 1 || frequencyChoice > 4) {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Введите целое число в диапазоне от 1 до 4 в зависимости от " +
+                                        "выбранного действия. Повторите ввод."));
+                        return;
+                    }
+
+                    RepeatingTask.RepeatFrequency frequency = TaskValidation.convertToFrequencyType(frequencyChoice);
+
+                    state.setFrequency(frequency);
+                    completeRepeatingTaskUpdate(chatId, state);
+                    break;
+
+                case NEW_START_DATE:
+                    LocalDateTime startdatetime = TaskValidation.parseDateTime(input);
+                    if (startdatetime == null || startdatetime.isBefore(LocalDateTime.now())) {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
+                                        "не ранее текущего момента.\n" +
+                                        "Повторите ввод."));
+                        return;
+                    }
+
+                    state.setStartDateTime(startdatetime);
+                    completeRepeatingTaskUpdate(chatId, state);
+                    break;
+            }
+            repeatingTaskUpdateContext.updateState(chatId, state);
+        } catch (NumberFormatException e) {
+            sender.sendAsync(new SendMessage(chatId.toString(),
+                    "❌ Пожалуйста, введите число."));
+        }
+    }
+
+    private void cancelTaskUpdateRepeatingTask(Long chatId) {
+        repeatingTaskUpdateContext.complete(chatId);
+        sender.sendAsync(new SendMessage(chatId.toString(), "❗ Редактирование задачи отменено!"+
+                "\n\nЕсли хотите вернуться к списку команд, используйте /help"));
+    }
+
+
+    private void askForNewFrequency(Long chatId) {
+        String message = "🔁 Укажите новый период повторения задачи:\n" +
+                "1. Ежечасно\n" +
+                "2. Ежедневно\n" +
+                "3. Еженедельно\n" +
+                "4. Ежемесячно";
+        sender.sendAsync(new SendMessage(chatId.toString(), message));
+    }
+
+    private void askForNewStartDate(Long chatId) {
+        sender.sendAsync(new SendMessage(chatId.toString(),
+                "🗓️ Укажите новую дату и время начала задачи (в формате дд.мм.гггг чч:мм) "));
+    }
+
+    private void completeRepeatingTaskUpdate(Long chatId, RepeatingTaskUpdateState state) {
+        Mono<RepeatingTask> updateMono;
+
+        if (state.getDescription() != null) {
+            updateMono = repeatingTaskService.updateTaskDescription(state.getTaskId(), state.getUserId(),
+                    state.getDescription());
+        } else if (state.getComplexity() != null) {
+            updateMono = repeatingTaskService.updateTaskComplexity(state.getTaskId(), state.getUserId(),
+                    state.getComplexity());
+        } else if (state.getFrequency() != null) {
+            updateMono = repeatingTaskService.updateTaskFrequency(state.getTaskId(), state.getUserId(),
+                    state.getFrequency());
+        } else if (state.getStartDateTime() != null) {
+            updateMono = repeatingTaskService.updateTaskStartDateTime(state.getTaskId(), state.getUserId(),
+                    state.getStartDateTime());
+        } else {
+            updateMono = Mono.empty();
+        }
+
+        updateMono.subscribe(
+                task -> {
+                    String message =  "🌟 Задача успешно изменена!" +
+                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";;
+                    sender.sendAsync(new SendMessage(chatId.toString(), message));
+                    repeatingTaskUpdateContext.complete(chatId);
+                },
+                error -> {
+                    sender.sendAsync(new SendMessage(chatId.toString(),
+                            "❌ Ошибка при обновлении задачи: " + error.getMessage()));
+                    repeatingTaskUpdateContext.complete(chatId);
+                }
+        );
+    }
+
+}

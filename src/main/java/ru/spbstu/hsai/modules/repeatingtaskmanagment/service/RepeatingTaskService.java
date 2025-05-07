@@ -8,7 +8,6 @@ import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.repository.RepeatingTaskRepository;
 
 import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -93,6 +92,49 @@ public class RepeatingTaskService {
     public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
         return taskRepository.deleteByIdAndUserId(taskId, userId)
                 .map(deletedCount -> deletedCount > 0);
+    }
+
+    public Mono<Boolean> taskExistsAndBelongsToUser(String taskId, String userId) {
+        return taskRepository.findByIdAndUserId(taskId, userId).hasElement();
+    }
+
+    // Обновляем описание задачи
+    public Mono<RepeatingTask> updateTaskDescription(String taskId, String userId, String newDescription) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setDescription(newDescription);
+                    return taskRepository.save(task);
+                });
+    }
+
+
+    // Обновляем сложность
+    public Mono<RepeatingTask> updateTaskComplexity(String taskId, String userId, Integer newComplexity) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setComplexity(newComplexity);
+                    return taskRepository.save(task);
+                });
+    }
+
+    // Обновляем периодичность
+    public Mono<RepeatingTask> updateTaskFrequency(String taskId, String userId,
+                                                    RepeatingTask.RepeatFrequency newFrequency) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setFrequency(newFrequency);
+                    return taskRepository.save(task);
+                });
+    }
+
+
+    // Обновляем дату и время начала
+    public Mono<RepeatingTask> updateTaskStartDateTime(String taskId, String userId,LocalDateTime newStartDateTime) {
+        return taskRepository.findByIdAndUserId(taskId, userId)
+                .flatMap(task -> {
+                    task.setStartDateTime(newStartDateTime);
+                    return taskRepository.save(task);
+                });
     }
 
 }

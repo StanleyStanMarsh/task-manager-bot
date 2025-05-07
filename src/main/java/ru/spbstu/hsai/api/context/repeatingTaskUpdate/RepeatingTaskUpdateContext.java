@@ -1,9 +1,12 @@
 package ru.spbstu.hsai.api.context.repeatingTaskUpdate;
 
 
+import org.springframework.stereotype.Component;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Component
 public class RepeatingTaskUpdateContext {
     private final Map<Long, RepeatingTaskUpdateState> updateStates = new ConcurrentHashMap<>();
 

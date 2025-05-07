@@ -37,5 +37,9 @@ public interface RepeatingTaskRepository extends ReactiveMongoRepository<Repeati
     @DeleteQuery("{ '_id': ?0, 'userId': ?1 }")
     Mono<Long> deleteByIdAndUserId(String id, String userId);
 
+    // Для поиска задачи по ID и пользователю
+    @Query("{ '_id': ?0, 'userId': ?1 }")
+    Mono<RepeatingTask> findByIdAndUserId(String taskId, String userId);
+
 
 }
