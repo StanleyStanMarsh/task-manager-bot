@@ -7,5 +7,4 @@ public enum SimpleTaskUpdateStep {
     NEW_COMPLEXITY,
     NEW_DEADLINE,
     NEW_REMINDER,
-    COMPLETE
 }
