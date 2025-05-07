@@ -26,8 +26,10 @@ public class RepeatingTaskCreationState {
     public RepeatingTask.RepeatFrequency getFrequency() { return frequency; }
     public void setFrequency( RepeatingTask.RepeatFrequency frequency) { this.frequency = frequency; }
 
+    public LocalDateTime getStartDateTime() { return startDateTime; };
+    public void setStartDateTime(LocalDateTime startDateTime) { this.startDateTime = startDateTime; }
+
     public RepeatingTaskCreationStep getCurrentStep() { return currentStep; }
     public void setCurrentStep(RepeatingTaskCreationStep currentStep) { this.currentStep = currentStep; }
-
 
 }

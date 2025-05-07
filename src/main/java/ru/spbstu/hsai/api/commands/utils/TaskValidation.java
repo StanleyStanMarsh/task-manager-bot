@@ -1,8 +1,10 @@
 package ru.spbstu.hsai.api.commands.utils;
 
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
@@ -38,4 +40,21 @@ public class TaskValidation {
         }
     }
 
+    public static RepeatingTask.RepeatFrequency convertToFrequencyType(int choice) {
+        return switch (choice) {
+            case 1 -> RepeatingTask.RepeatFrequency.HOURLY;
+            case 2 -> RepeatingTask.RepeatFrequency.DAILY;
+            case 3 -> RepeatingTask.RepeatFrequency.WEEKLY;
+            default -> RepeatingTask.RepeatFrequency.MONTHLY;
+        };
+    }
+
+    public static LocalDateTime parseDateTime(String input) {
+        try {
+            return LocalDateTime.parse(input, DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+
+    }
 }
