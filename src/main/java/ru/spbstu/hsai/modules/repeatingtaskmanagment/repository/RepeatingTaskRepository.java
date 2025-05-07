@@ -1,5 +1,6 @@
 package ru.spbstu.hsai.modules.repeatingtaskmanagment.repository;
 
+import org.springframework.data.mongodb.repository.DeleteQuery;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
@@ -31,6 +32,10 @@ public interface RepeatingTaskRepository extends ReactiveMongoRepository<Repeati
     // задачи на неделю
     @Query("{userId: ?0, nextExecution: {$gte: ?1,$lte: ?2}}")
     Flux<RepeatingTask> findTasksForWeek(String userId, LocalDateTime start, LocalDateTime end);
+
+    // Для /deletetask
+    @DeleteQuery("{ '_id': ?0, 'userId': ?1 }")
+    Mono<Long> deleteByIdAndUserId(String id, String userId);
 
 
 }

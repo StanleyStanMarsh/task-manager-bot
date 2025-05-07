@@ -54,11 +54,6 @@ public class RepeatingTaskService {
     }
 
 
-    // ищет все задачи, которые не выполнены к тек времени
-    //public Flux<RepeatingTask> getAllTasksToExecute(LocalDateTime now) {
-      //  return taskRepository.findAllTasksToExecute(now);
-   // }
-
     public Flux<RepeatingTask> getAllTasksToExecute() {
         LocalDateTime now = LocalDateTime.now();
         return taskRepository.findAllTasksToExecute(now);
@@ -93,4 +88,11 @@ public class RepeatingTaskService {
         return taskRepository.findTasksForDay(userId, startDate, endDate);
 
     }
+
+    // Удаление задачи
+    public Mono<Boolean> deleteTaskIfBelongsToUser(String taskId, String userId) {
+        return taskRepository.deleteByIdAndUserId(taskId, userId)
+                .map(deletedCount -> deletedCount > 0);
+    }
+
 }
