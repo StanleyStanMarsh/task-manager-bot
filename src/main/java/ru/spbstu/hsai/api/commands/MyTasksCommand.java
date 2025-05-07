@@ -66,7 +66,7 @@ public class MyTasksCommand implements TelegramCommand {
 
                     // Вывод обычных задач
                     if (!simpleTasks.isEmpty()) {
-                        sb.append("📋 Обычные задачи:\n\n");
+                        sb.append("📋 Ваши активные задачи:\n\n");
                         int counter = 1;
                         for (SimpleTask task : simpleTasks) {
                             sb.append(counter++).append(". ")

@@ -1,11 +1,17 @@
 package ru.spbstu.hsai.modules.repeatingtaskmanagment.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 
 @Document(collection = "repeatingtasks")
+@CompoundIndex(name = "next_exec_idx", def = "{'nextExecution': 1}")
 public class RepeatingTask {
     @Id
     private String id;
@@ -15,6 +21,8 @@ public class RepeatingTask {
     private int complexity;
     private RepeatFrequency frequency;
     private LocalDateTime startDateTime;
+
+    @Field("nextExecution")
     private LocalDateTime nextExecution;
 
     public enum RepeatFrequency {
@@ -82,22 +90,42 @@ public class RepeatingTask {
     }
 
 
-    // Метод для вычисления следующего выполнения
-    public void calculateNextExecution() {
+    public void calculateNextExecution(LocalDateTime currentTime) {
+        // Вычисляем сколько периодов пропущено
+        long periodsToSkip = calculatePeriodsToSkip(currentTime);
+
+        // Прибавляем нужное количество периодов
         switch (frequency) {
             case HOURLY:
-                this.nextExecution = nextExecution.plusHours(1);
+                this.nextExecution = nextExecution.plusHours(periodsToSkip);
                 break;
             case DAILY:
-                this.nextExecution = nextExecution.plusDays(1);
+                this.nextExecution = nextExecution.plusDays(periodsToSkip);
                 break;
             case WEEKLY:
-                this.nextExecution = nextExecution.plusWeeks(1);
+                this.nextExecution = nextExecution.plusWeeks(periodsToSkip);
                 break;
             case MONTHLY:
-                this.nextExecution = nextExecution.plusMonths(1);
+                this.nextExecution = nextExecution.plusMonths(periodsToSkip);
                 break;
         }
+    }
+
+    private long calculatePeriodsToSkip(LocalDateTime currentTime) {
+        Duration duration = Duration.between(nextExecution, currentTime);
+
+        return switch (frequency) {
+            case HOURLY -> duration.toHours() + 1;
+            case DAILY -> duration.toDays() + 1;
+            case WEEKLY -> duration.toDays() / 7 + 1;
+            case MONTHLY -> {
+                long months = ChronoUnit.MONTHS.between(
+                        nextExecution.toLocalDate(),
+                        currentTime.toLocalDate()
+                );
+                yield months + 1;
+            }
+        };
     }
 
     @Override

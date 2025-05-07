@@ -7,6 +7,8 @@ import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.repository.RepeatingTaskRepository;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Service
@@ -38,9 +40,9 @@ public class RepeatingTaskService {
 
 
     // вычисляет след дату выполнения и сохраняет обновленную задачу в бд
-    public Mono<Void> processCompletedTask(RepeatingTask task) {
-        task.calculateNextExecution();
-        return taskRepository.save(task).then();
+    public Mono<RepeatingTask> processCompletedTask(RepeatingTask task, LocalDateTime currentTime) {
+        task.calculateNextExecution(currentTime);
+        return taskRepository.save(task);
     }
 
     // Поиск существующей задачи у пользователя
@@ -52,9 +54,22 @@ public class RepeatingTaskService {
 
 
     // ищет все задачи, которые не выполнены к тек времени
-    public Flux<RepeatingTask> getAllTasksToExecute(LocalDateTime now) {
+    //public Flux<RepeatingTask> getAllTasksToExecute(LocalDateTime now) {
+      //  return taskRepository.findAllTasksToExecute(now);
+   // }
+
+    public Flux<RepeatingTask> getAllTasksToExecute() {
+        LocalDateTime now = LocalDateTime.now();
         return taskRepository.findAllTasksToExecute(now);
     }
 
 
+    // задачи на сегодня
+    public Flux<RepeatingTask> getTodayTasks(String userId) {
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
+
+        return taskRepository.findTasksForDay(userId, startOfDay, endOfDay);
+    }
 }
