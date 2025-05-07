@@ -16,6 +16,7 @@ public class User {
     private String firstName;  // может отсутствовать
     private String lastName;  // может отсутствовать
     private String role = "USER"; // значение по умолчанию
+    private String password;
 
     // Конструкторы
     public User() {}
@@ -61,6 +62,13 @@ public class User {
     }
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     @Override
