@@ -2,6 +2,7 @@ package ru.spbstu.hsai.modules.repeatingtaskmanagment.repository;
 
 
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
@@ -12,8 +13,8 @@ import java.time.LocalDateTime;
 @Repository
 public interface RepeatingTaskRepository extends ReactiveMongoRepository<RepeatingTask, String> {
     // Для /mytasks (все активные задачи пользователя)
-    @Query("{ 'userId': ?0, 'isCompleted': false }")
-    Flux<RepeatingTask> findActiveTasksByUserId(String userId);
+    @Query("{ 'userId': ?0 }")
+    Flux<RepeatingTask> findTasksByUserId(String userId);
 
     @Query("{ 'userId': ?0, 'nextExecution': { $lte: ?1 }, 'isCompleted': false }")
     Flux<RepeatingTask> findTasksToExecute(String userId, LocalDateTime now);

@@ -33,7 +33,7 @@ public class RepeatingTaskService {
 
 
     public Flux<RepeatingTask> getActiveTasks(String userId) {
-        return taskRepository.findActiveTasksByUserId(userId);
+        return taskRepository.findTasksByUserId(userId);
     }
 
 
