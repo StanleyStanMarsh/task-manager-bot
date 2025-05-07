@@ -1,7 +1,5 @@
 package ru.spbstu.hsai.api.context.repeatingTaskUpdate;
 
-
-import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationStep;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 
 import java.time.LocalDateTime;
@@ -13,7 +11,7 @@ public class RepeatingTaskUpdateState {
     private Integer newComplexity;
     private RepeatingTask.RepeatFrequency newFrequency;
     private LocalDateTime newStartDateTime;
-    private RepeatingTaskCreationStep currentStep = RepeatingTaskCreationStep.START;
+    private RepeatingTaskUpdateStep currentStep = RepeatingTaskUpdateStep.START;
 
     public RepeatingTaskUpdateState(String taskId, String userId) {
         this.taskId = taskId;
@@ -38,7 +36,7 @@ public class RepeatingTaskUpdateState {
     public LocalDateTime getStartDateTime() { return newStartDateTime; };
     public void setStartDateTime(LocalDateTime startDateTime) { this.newStartDateTime = startDateTime; }
 
-    public RepeatingTaskCreationStep getCurrentStep() { return currentStep; }
-    public void setCurrentStep(RepeatingTaskCreationStep currentStep) { this.currentStep = currentStep; }
+    public RepeatingTaskUpdateStep getCurrentStep() { return currentStep; }
+    public void setCurrentStep(RepeatingTaskUpdateStep currentStep) { this.currentStep = currentStep; }
 
 }
