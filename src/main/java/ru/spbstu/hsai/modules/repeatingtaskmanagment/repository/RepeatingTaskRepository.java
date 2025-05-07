@@ -32,4 +32,5 @@ public interface RepeatingTaskRepository extends ReactiveMongoRepository<Repeati
     @Query("{userId: ?0, nextExecution: {$gte: ?1,$lte: ?2}}")
     Flux<RepeatingTask> findTasksForWeek(String userId, LocalDateTime start, LocalDateTime end);
 
+
 }

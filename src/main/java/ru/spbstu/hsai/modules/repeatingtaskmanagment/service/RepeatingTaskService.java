@@ -84,4 +84,13 @@ public class RepeatingTaskService {
         return taskRepository.findTasksForWeek(userId, startOfWeek, endOfWeek);
 
     }
+
+    // на указанную дату
+    public Flux<RepeatingTask> getTasksByDate(String userId, LocalDate date) {
+        LocalDateTime startDate = date.atStartOfDay();
+        LocalDateTime endDate = date.plusDays(1).atStartOfDay();
+
+        return taskRepository.findTasksForDay(userId, startDate, endDate);
+
+    }
 }

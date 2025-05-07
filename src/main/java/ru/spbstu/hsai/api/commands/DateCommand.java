@@ -5,8 +5,11 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
@@ -14,6 +17,7 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 
 @Component
 public class DateCommand implements TelegramCommand{
@@ -21,13 +25,16 @@ public class DateCommand implements TelegramCommand{
     private final UserService userService;
     private final SimpleTaskService taskService;
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private final RepeatingTaskService repeatingTaskService;
 
     public DateCommand(TelegramSenderService sender,
-                        UserService userService,
-                        SimpleTaskService taskService) {
+                       UserService userService,
+                       SimpleTaskService taskService,
+                       RepeatingTaskService repeatingTaskService) {
         this.sender = sender;
         this.userService = userService;
         this.taskService = taskService;
+        this.repeatingTaskService = repeatingTaskService;
     }
 
     @Override
@@ -61,27 +68,57 @@ public class DateCommand implements TelegramCommand{
             }
 
             userService.findByTelegramId(tgUser.getId())
-                    .flatMapMany(user -> taskService.getTasksByDate(user.getId(), date))
-                    .collectList()
-                    .subscribe(tasks -> {
+                    .flatMap(user -> {
+                        Mono<List<SimpleTask>> simpleTasks = taskService
+                                .getTasksByDate(user.getId(), date).collectList();
+                        Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService
+                                .getTasksByDate(user.getId(), date).collectList();
+
+                        return Mono.zip(simpleTasks, repeatingTasks);
+                    })
+                    .subscribe(tuple -> {
+                        List<SimpleTask> simpleTasks = tuple.getT1();
+                        List<RepeatingTask> repeatingTasks = tuple.getT2();
+
                         String formattedDate = date.format(dateFormatter);
-                        if (tasks.isEmpty()) {
+
+                        if (simpleTasks.isEmpty() && repeatingTasks.isEmpty()) {
                             sender.sendAsync(new SendMessage(chatId.toString(),
                                     "⚡ У вас нет задач на " + formattedDate + "! Займитесь другими делами😀\n\n" +
                                             "Если хотите вернуться к списку команд, используйте /help"));
-                        } else {
-                            StringBuilder response = new StringBuilder("📋 Ваши задачи на " + formattedDate + ":\n\n");
+                            return;
+                        }
+
+                        StringBuilder sb = new StringBuilder();
+
+                        // Вывод обычных задач
+                        if (!simpleTasks.isEmpty()) {
+                            sb.append("📋 Ваши задачи на " + formattedDate + ":\n\n");
                             int counter = 1;
-                            for (SimpleTask task : tasks) {
-                                response.append(counter++).append(". ")
+                            for (SimpleTask task : simpleTasks) {
+                                sb.append(counter++).append(". ")
                                         .append(task.toString()).append("\n\n");
                             }
-                            response.append("Если хотите вернуться к списку команд, используйте /help");
-
-                            SendMessage messageToSend = new SendMessage(chatId.toString(), response.toString());
-                            messageToSend.enableHtml(true);
-                            sender.sendAsync(messageToSend);
                         }
+
+                        // Вывод периодических задач
+                        if (!repeatingTasks.isEmpty()) {
+                            if (!simpleTasks.isEmpty()) {
+                                sb.append("\n");
+                            }
+                            sb.append("🔁 Периодические задачи:\n\n");
+                            int counter = 1;
+                            for (RepeatingTask task : repeatingTasks) {
+                                sb.append(counter++).append(". ")
+                                        .append(task.toString()).append("\n\n");
+                            }
+                        }
+
+                        sb.append("\nЕсли хотите вернуться к списку команд, используйте /help");
+
+                        SendMessage messageToSend = new SendMessage(chatId.toString(), sb.toString());
+                        messageToSend.enableHtml(true);
+                        sender.sendAsync(messageToSend);
                     }, error -> {
                         sender.sendAsync(new SendMessage(chatId.toString(),
                                 "❌ Ошибка при получении задач: " + error.getMessage()));
