@@ -34,6 +34,8 @@ public class RepeatingTask {
         }
     }
 
+    public RepeatingTask() {}
+
     public RepeatingTask(String userId, String description, int complexity,
                          RepeatFrequency frequency, LocalDateTime startDateTime) {
         this.userId = userId;
