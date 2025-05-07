@@ -1,6 +1,5 @@
 package ru.spbstu.hsai.modules.repeatingtaskmanagment.repository;
 
-
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
@@ -8,9 +7,8 @@ import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import org.springframework.data.mongodb.repository.Query;
 import reactor.core.publisher.Flux;
 
-import java.time.Instant;
-
 import java.time.LocalDateTime;
+
 
 @Repository
 public interface RepeatingTaskRepository extends ReactiveMongoRepository<RepeatingTask, String> {
@@ -29,5 +27,9 @@ public interface RepeatingTaskRepository extends ReactiveMongoRepository<Repeati
     // задачи на день
     @Query("{ 'userId': ?0, 'nextExecution': {$gte: ?1,$lt: ?2 }}")
     Flux<RepeatingTask> findTasksForDay(String userId, LocalDateTime periodStart, LocalDateTime periodEnd);
+
+    // задачи на неделю
+    @Query("{userId: ?0, nextExecution: {$gte: ?1,$lte: ?2}}")
+    Flux<RepeatingTask> findTasksForWeek(String userId, LocalDateTime start, LocalDateTime end);
 
 }

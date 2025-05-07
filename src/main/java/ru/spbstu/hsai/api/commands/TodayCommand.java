@@ -46,8 +46,6 @@ public class TodayCommand implements TelegramCommand{
         Long chatId = message.getChatId();
 
         userService.findByTelegramId(tgUser.getId())
-                //.flatMapMany(user -> taskService.getTodayTasks(user.getId()))
-                //.collectList()
                 .flatMap(user -> {
                     Mono<List<SimpleTask>> simpleTasks = taskService.getTodayTasks(user.getId()).collectList();
                     Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getTodayTasks(user.getId()).collectList();
@@ -100,37 +98,6 @@ public class TodayCommand implements TelegramCommand{
                             "❌ Ошибка при получении задач: " + error.getMessage()));
                 });
 
-
-
-
-
-
-
-                /*
-                .subscribe(tasks -> {
-                    if (tasks.isEmpty()) {
-                        sender.sendAsync(new SendMessage(chatId.toString(),
-                                "⚡ У вас нет задач на сегодня! Отдыхайте😌\n\n" +
-                                        "Если хотите вернуться к списку команд, используйте /help"));
-                    } else {
-                        StringBuilder response = new StringBuilder("📋 Ваши задачи на сегодня:\n\n");
-                        int counter = 1;
-
-                        for (SimpleTask task : tasks) {
-                            response.append(counter++).append(". ")
-                                    .append(task.toString()).append("\n\n");
-                        }
-
-                        response.append("Если хотите вернуться к списку команд, используйте /help");
-
-                        SendMessage messageToSend = new SendMessage(chatId.toString(), response.toString());
-                        messageToSend.enableHtml(true);
-                        sender.sendAsync(messageToSend);
-                    }
-                }, error -> {
-                    sender.sendAsync(new SendMessage(chatId.toString(),
-                            "❌ Ошибка при получении задач: " + error.getMessage()));
-                }); */
     }
 
 }

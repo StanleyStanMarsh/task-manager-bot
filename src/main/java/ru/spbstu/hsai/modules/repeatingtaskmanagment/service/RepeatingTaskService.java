@@ -7,6 +7,7 @@ import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.repository.RepeatingTaskRepository;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -71,5 +72,16 @@ public class RepeatingTaskService {
         LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
 
         return taskRepository.findTasksForDay(userId, startOfDay, endOfDay);
+    }
+
+    public Flux<RepeatingTask> getWeekTasks(String userId) {
+        LocalDate monday = LocalDate.now().with(DayOfWeek.MONDAY);
+        LocalDate sunday = monday.plusDays(6);
+
+        LocalDateTime startOfWeek = monday.atStartOfDay();
+        LocalDateTime endOfWeek = sunday.atTime(23, 59, 59);
+
+        return taskRepository.findTasksForWeek(userId, startOfWeek, endOfWeek);
+
     }
 }
