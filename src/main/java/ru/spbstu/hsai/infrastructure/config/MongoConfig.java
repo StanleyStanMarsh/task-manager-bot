@@ -18,7 +18,8 @@ import ru.spbstu.hsai.infrastructure.db.MongoProperties;
 @EnableReactiveMongoRepositories(
         basePackages = {
                 "ru.spbstu.hsai.modules.usermanagement.repository",
-                "ru.spbstu.hsai.modules.simpletaskmanagment.repository"
+                "ru.spbstu.hsai.modules.simpletaskmanagment.repository",
+                "ru.spbstu.hsai.modules.repeatingtaskmanagment.repository"
         }
 )
 @PropertySource("classpath:mongo.properties")
