@@ -1,12 +1,18 @@
 package ru.spbstu.hsai.modules.repeatingtaskmanagment.model;
 
+import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 @Document(collection = "repeatingtasks")
-public class RepeatingTask extends SimpleTask {
+public class RepeatingTask {
+    @Id
+    private String id;
+
+    private String userId;
+    private String description;
+    private int complexity;
     private RepeatFrequency frequency;
     private LocalDateTime startDateTime;
     private LocalDateTime nextExecution;
@@ -30,35 +36,47 @@ public class RepeatingTask extends SimpleTask {
 
     public RepeatingTask(String userId, String description, int complexity,
                          RepeatFrequency frequency, LocalDateTime startDateTime) {
-        super(userId, description, complexity, startDateTime.toLocalDate(), null);
+        this.userId = userId;
+        this.description = description;
+        this.complexity = complexity;
         this.frequency = frequency;
         this.startDateTime = startDateTime;
         this.nextExecution = startDateTime;
     }
 
     // Геттеры и сеттеры
-    public RepeatFrequency getFrequency() {
-        return frequency;
+    public RepeatFrequency getFrequency() {return frequency;}
+    public void setFrequency(RepeatFrequency frequency) {this.frequency = frequency;}
+
+    public LocalDateTime getStartDateTime() {return startDateTime;}
+    public void setStartDateTime(LocalDateTime startDateTime) {this.startDateTime = startDateTime;}
+
+    public LocalDateTime getNextExecution() {return nextExecution;}
+    public void setNextExecution(LocalDateTime nextExecution) {this.nextExecution = nextExecution;}
+
+    public String getId() {
+        return id;
     }
 
-    public void setFrequency(RepeatFrequency frequency) {
-        this.frequency = frequency;
+    public String getUserId() {
+        return userId;
+    }
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
-    public LocalDateTime getStartDateTime() {
-        return startDateTime;
+    public String getDescription() {
+        return description;
+    }
+    public void setDescription(String description) {
+        this.description = description;
     }
 
-    public void setStartDateTime(LocalDateTime startDateTime) {
-        this.startDateTime = startDateTime;
+    public int getComplexity() {
+        return complexity;
     }
-
-    public LocalDateTime getNextExecution() {
-        return nextExecution;
-    }
-
-    public void setNextExecution(LocalDateTime nextExecution) {
-        this.nextExecution = nextExecution;
+    public void setComplexity(int complexity) {
+        this.complexity = complexity;
     }
 
 
@@ -91,4 +109,3 @@ public class RepeatingTask extends SimpleTask {
     }
 
 }
-
