@@ -14,6 +14,7 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 import org.telegram.telegrambots.meta.api.objects.Message;
 
+import java.util.Comparator;
 import java.util.List;
 
 @Component
@@ -67,6 +68,8 @@ public class MyTasksCommand implements TelegramCommand {
                     // Вывод обычных задач
                     if (!simpleTasks.isEmpty()) {
                         sb.append("📋 Ваши активные задачи:\n\n");
+                        // Сортируем задачи по дате дедлайна
+                        simpleTasks.sort(Comparator.comparing(SimpleTask::getDeadline));
                         int counter = 1;
                         for (SimpleTask task : simpleTasks) {
                             sb.append(counter++).append(". ")
@@ -80,6 +83,7 @@ public class MyTasksCommand implements TelegramCommand {
                             sb.append("\n");
                         }
                         sb.append("🔁 Периодические задачи:\n\n");
+                        repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                         int counter = 1;
                         for (RepeatingTask task : repeatingTasks) {
                             sb.append(counter++).append(". ")

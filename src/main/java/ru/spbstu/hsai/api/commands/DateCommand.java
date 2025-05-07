@@ -17,6 +17,7 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.List;
 
 @Component
@@ -107,6 +108,7 @@ public class DateCommand implements TelegramCommand{
                                 sb.append("\n");
                             }
                             sb.append("🔁 Периодические задачи:\n\n");
+                            repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                             int counter = 1;
                             for (RepeatingTask task : repeatingTasks) {
                                 sb.append(counter++).append(". ")

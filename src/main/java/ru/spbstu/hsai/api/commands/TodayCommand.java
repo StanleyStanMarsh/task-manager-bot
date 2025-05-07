@@ -15,6 +15,7 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 
+import java.util.Comparator;
 import java.util.List;
 
 @Component
@@ -81,6 +82,7 @@ public class TodayCommand implements TelegramCommand{
                             sb.append("\n");
                         }
                         sb.append("🔁 Периодические задачи:\n\n");
+                        repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                         int counter = 1;
                         for (RepeatingTask task : repeatingTasks) {
                             sb.append(counter++).append(". ")
