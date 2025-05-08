@@ -6,28 +6,28 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import ru.spbstu.hsai.api.commands.utils.TaskValidation;
-import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationContext;
-import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationState;
-import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationStep;
+import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationContext;
+import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationState;
+import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationStep;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
-import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Component
-public class NewTaskCommand implements TelegramCommand {
+public class NewRepeatingTaskCommand implements TelegramCommand{
     private final TelegramSenderService sender;
     private final UserService userService;
-    private final SimpleTaskService taskService;
-    private final SimpleTaskCreationContext creationContext;
+    private final RepeatingTaskService taskService;
+    private final RepeatingTaskCreationContext creationContext;
 
-    public NewTaskCommand(TelegramSenderService sender,
-                          UserService userService,
-                          SimpleTaskService taskService,
-                          SimpleTaskCreationContext creationContext) {
+    public NewRepeatingTaskCommand(TelegramSenderService sender,
+                                   UserService userService,
+                                   RepeatingTaskService taskService,
+                                   RepeatingTaskCreationContext creationContext) {
         this.sender = sender;
         this.userService = userService;
         this.taskService = taskService;
@@ -36,10 +36,24 @@ public class NewTaskCommand implements TelegramCommand {
 
     @Override
     public boolean supports(String command) {
-        return "/newtask".equalsIgnoreCase(command);
+        return "/newrepeatingtask".equalsIgnoreCase(command);
     }
 
-    @EventListener(condition = "@telegramCommandsExtract.checkCommand(#a0.update, '/newtask')")
+    @EventListener
+    public void handleRegularMessage(UpdateReceivedEvent event) {
+        Message message = event.getUpdate().getMessage();
+        if (message == null || !message.hasText() || message.isCommand()) {
+            return;
+        }
+
+        Long chatId = message.getChatId();
+        if (creationContext.hasActiveSession(chatId)) {
+            System.out.println("Processing regular message for chat " + chatId);
+            processUserInput(chatId, message.getText());
+        }
+    }
+
+    @EventListener(condition = "@telegramCommandsExtract.checkCommand(#a0.update, '/newrepeatingtask')")
     public void handle(UpdateReceivedEvent event) {
         Message message = event.getUpdate().getMessage();
         User tgUser = message.getFrom();
@@ -61,24 +75,12 @@ public class NewTaskCommand implements TelegramCommand {
         } else {
             processUserInput(chatId, message.getText());
         }
+
     }
 
-    @EventListener
-    public void handleRegularMessage(UpdateReceivedEvent event) {
-        Message message = event.getUpdate().getMessage();
-        if (message == null || !message.hasText() || message.isCommand()) {
-            return;
-        }
-
-        Long chatId = message.getChatId();
-        if (creationContext.hasActiveSession(chatId)) {
-            System.out.println("Processing regular message for chat " + chatId);
-            processUserInput(chatId, message.getText());
-        }
-    }
 
     private void processUserInput(Long chatId, String input) {
-        SimpleTaskCreationState state = creationContext.getState(chatId);
+        RepeatingTaskCreationState state = creationContext.getState(chatId);
 
         try {
             switch (state.getCurrentStep()) {
@@ -89,7 +91,7 @@ public class NewTaskCommand implements TelegramCommand {
                         return;
                     }
                     state.setDescription(input);
-                    state.setCurrentStep(SimpleTaskCreationStep.COMPLEXITY);
+                    state.setCurrentStep(RepeatingTaskCreationStep.COMPLEXITY);
                     askForComplexity(chatId);
                     break;
 
@@ -102,44 +104,38 @@ public class NewTaskCommand implements TelegramCommand {
                         return;
                     }
                     state.setComplexity(complexity);
-                    state.setCurrentStep(SimpleTaskCreationStep.DEADLINE);
-                    askForDeadline(chatId);
+                    state.setCurrentStep(RepeatingTaskCreationStep.FREQUENCY);
+                    askForFrequency(chatId);
                     break;
 
-                case DEADLINE:
-                    LocalDate deadline = TaskValidation.parseDate(input);
-                    if (deadline == null || deadline.isBefore(LocalDate.now())) {
-                        sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Укажите дедлайн задачи в формате дд.мм.гггг не ранее текущей даты. " +
-                                        "Повторите ввод."));
-                        return;
-                    }
-                    state.setDeadline(deadline);
-                    state.setCurrentStep(SimpleTaskCreationStep.REMINDER);
-                    askForReminder(chatId);
-                    break;
-
-                case REMINDER:
-                    int reminderChoice = Integer.parseInt(input);
-                    if (reminderChoice < 1 || reminderChoice > 4) {
+                case FREQUENCY:
+                    int frequencyChoice = Integer.parseInt(input);
+                    if (frequencyChoice < 1 || frequencyChoice > 4) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
                                 "❌ Введите целое число в диапазоне от 1 до 4 в зависимости от " +
                                         "выбранного действия. Повторите ввод."));
                         return;
                     }
 
-                    SimpleTask.ReminderType reminder = TaskValidation.convertToReminderType(reminderChoice);
+                    RepeatingTask.RepeatFrequency frequency = TaskValidation.convertToFrequencyType(frequencyChoice);
 
-                    // Проверяем валидность напоминания
-                    if (reminder != SimpleTask.ReminderType.NO_REMINDER &&
-                            !TaskValidation.isReminderValid(state.getDeadline(), reminder)) {
+
+                    state.setFrequency(frequency);
+                    state.setCurrentStep(RepeatingTaskCreationStep.START_DATE);
+                    askForStartDate(chatId);
+                    break;
+
+                case START_DATE:
+                    LocalDateTime startdatetime = TaskValidation.parseDateTime(input);
+                    if (startdatetime == null || startdatetime.isBefore(LocalDateTime.now())) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Нельзя установить напоминание на прошедшую дату. " +
-                                        "Пожалуйста, выберите другое напоминание."));
+                                "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
+                                        "не ранее текущего момента.\n" +
+                                        "Повторите ввод."));
                         return;
                     }
 
-                    state.setReminder(reminder);
+                    state.setStartDateTime(startdatetime);
                     completeTaskCreation(chatId, state);
                     break;
             }
@@ -150,7 +146,6 @@ public class NewTaskCommand implements TelegramCommand {
         }
     }
 
-
     private void askForDescription(Long chatId) {
         sender.sendAsync(new SendMessage(chatId.toString(), "📌 Введите описание задачи:"));
     }
@@ -160,28 +155,27 @@ public class NewTaskCommand implements TelegramCommand {
                 "📊 Оцените сложность задачи от 1 до 5:"));
     }
 
-    private void askForDeadline(Long chatId) {
-        sender.sendAsync(new SendMessage(chatId.toString(),
-                "🗓️ Укажите дедлайн (в формате дд.мм.гггг):"));
-    }
-
-    private void askForReminder(Long chatId) {
-        String message = "⏰ Установить напоминание о задаче до дедлайна?\n" +
-                "1. За 1 час\n" +
-                "2. За 1 день\n" +
-                "3. За 1 неделю\n" +
-                "4. Без напоминания";
+    private void askForFrequency(Long chatId) {
+        String message = "🔁 Укажите период повторения задачи:\n" +
+                "1. Ежечасно\n" +
+                "2. Ежедневно\n" +
+                "3. Еженедельно\n" +
+                "4. Ежемесячно";
         sender.sendAsync(new SendMessage(chatId.toString(), message));
     }
 
+    private void askForStartDate(Long chatId) {
+        sender.sendAsync(new SendMessage(chatId.toString(),
+                "🗓️ Укажите дату и время начала задачи (в формате дд.мм.гггг чч:мм) "));
+    }
 
-    private void completeTaskCreation(Long chatId, SimpleTaskCreationState state) {
+    private void completeTaskCreation(Long chatId, RepeatingTaskCreationState state) {
         taskService.createTask(
                 state.getUserId(),
                 state.getDescription(),
                 state.getComplexity(),
-                state.getDeadline(),
-                state.getReminder()
+                state.getFrequency(),
+                state.getStartDateTime()
         ).subscribe(
                 task -> {
                     String successMessage = "✅Задача создана!\n" + task.toString() +
@@ -208,5 +202,4 @@ public class NewTaskCommand implements TelegramCommand {
                 }
         );
     }
-
 }
