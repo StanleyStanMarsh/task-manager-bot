@@ -3,7 +3,11 @@ package ru.spbstu.hsai.modules.usermanagement.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.codec.ByteArrayEncoder;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.context.SecurityContext;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.usermanagement.exceptions.*;
@@ -18,9 +22,12 @@ public class UserService {
 
     @Value("${superadmin.telegramId}")
     private String superAdminId;
+    private PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public Mono<User> findByTelegramId(Long telegramId) {
@@ -74,17 +81,19 @@ public class UserService {
                 .then(); // Убеждаемся, что возвращается Mono<Void>
     }
 
-    public Mono<User> ensureSuperAdmin(Long telegramId, String username, String firstName, String lastName) {
+    public Mono<User> ensureSuperAdmin(Long telegramId,
+                                       String username,
+                                       String firstName,
+                                       String lastName,
+                                       String hashedPassword) {
         return userRepository.findByTelegramId(telegramId)
-                .flatMap(existing -> {
-                    // уже есть — ничего не меняем, возвращаем
-                    return Mono.just(existing);
-                })
+                .flatMap(Mono::just)
                 .switchIfEmpty(Mono.defer(() -> {
                     User admin = new User(telegramId, "ADMIN");
                     admin.setUsername(username);
                     admin.setFirstName(firstName);
                     admin.setLastName(lastName);
+                    admin.setPassword(hashedPassword);
                     return userRepository.save(admin);
                 }));
     }
@@ -102,11 +111,11 @@ public class UserService {
                 (lastName != null && !lastName.equals(user.getLastName()));
     }
 
-    public Mono<Void> promoteToAdmin(Long senderId, Long targetId) {
+    public Mono<Void> promoteToAdminWithPassword(Long senderId, Long targetId, String rawPassword) {
         return userRepository.findByTelegramId(senderId)
                 .switchIfEmpty(Mono.error(new SenderNotFoundException(senderId)))
                 .flatMap(senderUser -> {
-                    if (!"ADMIN".equals(senderUser.getRole())) {
+                    if (!"ADMIN".equals(senderUser.getRole()) && !"SUPER_ADMIN".equals(senderUser.getRole())) {
                         return Mono.error(new UnauthorizedOperationException(senderId));
                     }
                     return userRepository.findByTelegramId(targetId)
@@ -116,6 +125,7 @@ public class UserService {
                                     return Mono.error(new AlreadyGrantedException(targetId));
                                 }
                                 targetUser.setRole("ADMIN");
+                                targetUser.setPassword(passwordEncoder.encode(rawPassword));
                                 return userRepository.save(targetUser).then();
                             });
                 });
@@ -125,7 +135,8 @@ public class UserService {
         return userRepository.findByTelegramId(senderId)
                 .switchIfEmpty(Mono.error(new SenderNotFoundException(senderId)))
                 .flatMap(senderUser -> {
-                    if (!"ADMIN".equals(senderUser.getRole())) {
+                    String senderRole = senderUser.getRole();
+                    if (!"ADMIN".equals(senderRole)) {
                         return Mono.error(new UnauthorizedOperationException(senderId));
                     }
                     if (superAdminId.equals(senderId.toString())) {
@@ -135,6 +146,7 @@ public class UserService {
                     return userRepository.save(senderUser).then();
                 });
     }
+
 
     public Mono<Void> demoteToUser(Long senderId, Long targetId) {
         return userRepository.findByTelegramId(senderId)

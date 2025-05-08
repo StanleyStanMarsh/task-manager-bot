@@ -15,6 +15,8 @@ public class Main {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 ru.spbstu.hsai.infrastructure.config.WebConfig.class,
                 ru.spbstu.hsai.infrastructure.config.MongoConfig.class,
+                ru.spbstu.hsai.infrastructure.config.SecurityConfig.class
+                ru.spbstu.hsai.infrastructure.config.MongoConfig.class,
                 SchedulerConfig.class
         );
 
