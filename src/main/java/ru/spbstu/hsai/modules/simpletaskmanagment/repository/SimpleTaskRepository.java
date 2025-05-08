@@ -45,10 +45,5 @@ public interface SimpleTaskRepository extends ReactiveMongoRepository<SimpleTask
     @Query("{ '_id': ?0, 'userId': ?1 }")
     Mono<SimpleTask> findByIdAndUserId(String taskId, String userId);
 
-
-    // Для поиска просроченных задач (мб можно будет использовать для напоминаний)
-    //@Query("{ 'userId': ?0, 'deadline': { $lt: ?1 }, 'isCompleted': false }")
-    //Flux<SimpleTask> findOverdueTasks(String userId, LocalDate currentDate);
-
 }
 
