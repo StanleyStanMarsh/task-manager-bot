@@ -35,6 +35,11 @@ public class SimpleTaskService {
         return taskRepository.findActiveTasksByUserId(userId);
     }
 
+    // Получение завершенных задач пользователя
+    public Flux<SimpleTask> getCompletedTasks(String userId) {
+        return taskRepository.findCompletedTasksByUserId(userId);
+    }
+
     // Задачи на сегодня
     public Flux<SimpleTask> getTodayTasks(String userId) {
         return taskRepository.findTasksByDate(userId, LocalDate.now());

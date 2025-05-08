@@ -15,6 +15,9 @@ public interface SimpleTaskRepository extends ReactiveMongoRepository<SimpleTask
     @Query("{ 'userId': ?0, 'isCompleted': false }")
     Flux<SimpleTask> findActiveTasksByUserId(String userId);
 
+    @Query("{ 'userId': ?0, 'isCompleted': true }")
+    Flux<SimpleTask> findCompletedTasksByUserId(String userId);
+
     // Для /today (активные задачи на сегодня)
     @Query("{ 'userId': ?0, 'deadline': ?1, 'isCompleted': false }")
     Flux<SimpleTask> findTasksByDate(String userId, LocalDate date);
