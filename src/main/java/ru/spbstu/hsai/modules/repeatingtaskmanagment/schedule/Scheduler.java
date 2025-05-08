@@ -32,7 +32,7 @@ public class Scheduler {
 
         repeatingTaskService.getAllTasksToExecute()
                 .flatMap(task -> {
-                    // 1. Отправка уведомления (заглушка - реализуйте ваш NotificationService)
+                    // 1. Отправка уведомления
                     return sendNotification(task.getUserId(), task.getDescription())
                             // 2. Обновление даты выполнения
                             .then(repeatingTaskService.processCompletedTask(task, now));
