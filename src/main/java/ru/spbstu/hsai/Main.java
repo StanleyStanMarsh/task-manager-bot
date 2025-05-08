@@ -13,6 +13,7 @@ public class Main {
 
     public static void main(String[] args) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                ru.spbstu.hsai.infrastructure.config.VaultConfiguration.class,
                 ru.spbstu.hsai.infrastructure.config.WebConfig.class,
                 ru.spbstu.hsai.infrastructure.config.MongoConfig.class,
                 ru.spbstu.hsai.infrastructure.config.SecurityConfig.class

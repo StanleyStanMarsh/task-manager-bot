@@ -24,8 +24,8 @@ import ru.spbstu.hsai.infrastructure.db.MongoProperties;
                 "ru.spbstu.hsai.modules.simpletaskmanagment.repository"
         }
 )
-@PropertySource("classpath:mongo.properties")
-@PropertySource("classpath:superadmin.properties")
+//@PropertySource("classpath:mongo.properties")
+//@PropertySource("classpath:superadmin.properties")
 public class MongoConfig {
 
     private static final Logger log = LoggerFactory.getLogger(MongoConfig.class);
