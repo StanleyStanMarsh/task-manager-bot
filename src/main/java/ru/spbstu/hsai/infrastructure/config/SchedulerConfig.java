@@ -32,21 +32,13 @@ public class SchedulerConfig implements SchedulingConfigurer {
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
         taskRegistrar.setScheduler(taskScheduler());
 
-        // Вычисляем начальную задержку до следующей минуты
         long delayUntilNextMinute = Duration.ofMillis(60000 - (System.currentTimeMillis() % 60000)).toMillis();
 
-        // Планируем executeDueTasks каждые 60 секунд с начальной задержкой
+        //  Планируем запуск единого метода runUnifiedScheduler
         taskRegistrar.addFixedRateTask(new FixedRateTask(
-                schedulerComponent::executeDueTasks,
-                60000L, // Интервал
-                delayUntilNextMinute // Начальная задержка
-        ));
-
-        // Планируем checkAndNotify каждые 60 секунд с начальной задержкой
-        taskRegistrar.addFixedRateTask(new FixedRateTask(
-                schedulerComponent::checkAndNotify,
-                60000L, // Интервал
-                delayUntilNextMinute // Начальная задержка
+                schedulerComponent::runUnifiedScheduler,
+                60000L, // интервал в миллисекундах
+                delayUntilNextMinute
         ));
     }
 }
