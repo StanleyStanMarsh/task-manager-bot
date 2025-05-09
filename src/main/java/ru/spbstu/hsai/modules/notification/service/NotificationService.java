@@ -6,9 +6,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
+import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
@@ -33,6 +36,7 @@ import java.util.List;
 @Service
 public class NotificationService {
     private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
+    private final RepeatingTaskService repeatingTaskService; //повторяющиеся задачи
     private final UserService userService;
     private final TelegramNotifySender notifySender;
     private final SimpleTaskService taskService;
@@ -49,10 +53,12 @@ public class NotificationService {
     public NotificationService(
             UserService userService,
             TelegramNotifySender notifySender,
-            SimpleTaskService taskService) {
+            SimpleTaskService taskService,
+            RepeatingTaskService repeatingTaskService) {
         this.userService = userService;
         this.notifySender = notifySender;
         this.taskService = taskService;
+        this.repeatingTaskService = repeatingTaskService;
     }
 
     // Проверка задач с напоминанием за час (в 23:00)
@@ -96,15 +102,21 @@ public class NotificationService {
 
         // Вычисляем дату дедлайна (предыдущий день)
         ZonedDateTime reminderTime = nowZoned.withHour(targetHour).withMinute(0).withSecond(0).withNano(0);
-        Instant overdueDate = reminderTime.minus(overdueOffset).withHour(0).withMinute(0).withSecond(0).withNano(0).toInstant();; // Дедлайн был вчера
+        ZonedDateTime overdueDate = reminderTime.minus(overdueOffset);
 
+        // Устанавливаем московское время (Europe/Moscow) и время 21:00
+        ZonedDateTime overdueDate1 = overdueDate.toLocalDate()
+                .atTime(0, 0) // Устанавливаем время 21:00
+                .atZone(ZoneId.of("Europe/Moscow"));
 
-        System.out.println("Overdue date: " + overdueDate);
+        Instant overdueLikeDB = overdueDate1.toInstant();
+
+        System.out.println("Overdue date: " + overdueLikeDB);
         System.out.println("Zone: " + zone);
 
         // Этап 1: Фильтрация задач с просроченным дедлайном
         MatchOperation matchOverdueTasks = Aggregation.match(
-                Criteria.where("deadline").is(overdueDate) // Фильтр по точной дате
+                Criteria.where("deadline").is(overdueLikeDB) // Фильтр по точной дате
                         .and("isCompleted").is(false) // Только незавершённые задачи
         );
 
@@ -165,16 +177,22 @@ public class NotificationService {
         ZoneId zoneId = ZoneId.of(zone);
         ZonedDateTime nowZoned = nowUtc.atZone(zoneId);
 
-        // Проверяем, соответствует ли текущее время целевому часу (23:00 или 00:00) (поправить, чтобы лог был нормальным)
+       // Проверяем, соответствует ли текущее время целевому часу (23:00 или 00:00) (поправить, чтобы лог был нормальным)
         if (nowZoned.getHour() != targetHour || nowZoned.getMinute() != 0 || nowZoned.getSecond() != 0) {
             return new AggregationOperation[]{};
         }
 
         // Вычисляем дедлайн, который соответствует напоминанию
         ZonedDateTime reminderTime = nowZoned.withHour(targetHour).withMinute(0).withSecond(0).withNano(0);
-        ZonedDateTime deadlineTime = reminderTime.plus(reminderOffset); //проверяю
-        Instant deadlineStart = deadlineTime.toInstant();
-        Instant deadlineEnd = deadlineTime.plus(Duration.ofMinutes(1)).toInstant();
+        ZonedDateTime deadlineTime = reminderTime.plus(reminderOffset);
+
+        // Устанавливаем московское время (Europe/Moscow) и время 21:00
+        ZonedDateTime deadlineMoscowTime = deadlineTime.toLocalDate()
+                .atTime(0, 0) // Устанавливаем время 21:00
+                .atZone(ZoneId.of("Europe/Moscow"));
+
+        Instant deadlineStart = deadlineMoscowTime.toInstant();
+        Instant deadlineEnd = deadlineMoscowTime.plus(Duration.ofMinutes(1)).toInstant();
 
         System.out.println(reminderTime);
         System.out.println(deadlineTime);
@@ -222,16 +240,66 @@ public class NotificationService {
         };
     }
 
-    public Mono<Void> checkAndNotify() {
-        Instant nowUtc = Instant.now();
 
-        return Flux.merge(
-                findTasksForHourReminder(nowUtc).flatMap(task -> sendNotification(task, false)),
-                findTasksForDayReminder(nowUtc).flatMap(task -> sendNotification(task, false)),
-                findTasksForWeekReminder(nowUtc).flatMap(task -> sendNotification(task, false)),
-                findTasksForOverdueReminder(nowUtc).flatMap(task -> sendNotification(task, true))
-        ).then();
+
+
+    public Flux<Void> sendRepeatingTaskReminders(List<RepeatingTask> repeatingTasks, Instant nowUtc) {
+
+        return Flux.fromIterable(repeatingTasks)
+                .flatMap(rt -> userService.findById(rt.getUserId())
+                        .flatMap(user -> {
+
+                            ZoneId userZone = ZoneId.of(user.getTimezone());
+                            ZonedDateTime nextExecZoned = rt.getNextExecution()
+                                    .atZone(ZoneId.of("Europe/Moscow"))
+                                    .withZoneSameInstant(userZone);
+                            System.out.println(rt.getNextExecution());
+                            System.out.println(nextExecZoned);
+
+
+                            String time = nextExecZoned.toLocalTime()
+                                    .format(DateTimeFormatter.ofPattern("HH:mm"));
+                            String msg = "🔄 Повторяющаяся задача:" +
+                                    "\n🆔 ID: " + rt.getId() +
+                                    "\n📌 " + rt.getDescription() +
+                                    "\n⏰ Выполнение: " + time;
+
+                            return notifySender.sendNotification(user.getTelegramId(), msg)
+                                    .then(repeatingTaskService.processCompletedTask(
+                                            rt,
+                                            LocalDateTime.ofInstant(nowUtc, userZone)
+                                    ))
+                                    .then();
+                        })
+                        .onErrorResume(e -> {
+                            logger.error("Ошибка при обработке задачи: {}", e.getMessage());
+                            return Mono.empty();
+                        })
+                )
+                .thenMany(Flux.empty()); // Явное преобразование в Flux<Void>
     }
+
+
+
+    // === Combined execution ===
+    public Mono<Void> checkAndNotify(List<RepeatingTask> repeatingTasks, Instant nowUtc) {
+        Flux<Void> oneTime = Flux.merge(
+                findTasksForHourReminder(nowUtc).flatMap(t -> sendNotification(t, false)),
+                findTasksForDayReminder(nowUtc).flatMap(t -> sendNotification(t, false)),
+                findTasksForWeekReminder(nowUtc).flatMap(t -> sendNotification(t, false)),
+                findTasksForOverdueReminder(nowUtc).flatMap(t -> sendNotification(t, true))
+        );
+
+        Flux<Void> repeating = sendRepeatingTaskReminders(repeatingTasks, nowUtc);
+
+        return Flux.merge(oneTime, repeating).then();
+    }
+
+
+
+
+
+
 
 
     private String buildReminderMessage(SimpleTask task, ZoneId userZone, boolean isOverdue) {
