@@ -3,6 +3,7 @@ package ru.spbstu.hsai.modules.notification.component;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.modules.notification.controller.NotificationController;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.notification.service.NotificationService;
 
@@ -15,11 +16,14 @@ import java.time.format.DateTimeFormatter;
 public class SchedulerComponent {
     private final RepeatingTaskService repeatingTaskService;
     private final NotificationService notificationService;
+    private final NotificationController notificationController;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-    public SchedulerComponent(RepeatingTaskService repeatingTaskService, NotificationService notificationService) {
+    public SchedulerComponent(RepeatingTaskService repeatingTaskService, NotificationService notificationService,
+                              NotificationController notificationController) {
         this.repeatingTaskService = repeatingTaskService;
         this.notificationService = notificationService;
+        this.notificationController = notificationController;
     }
 
     @PostConstruct
@@ -37,7 +41,7 @@ public class SchedulerComponent {
                 .collectList() // Получаем все задачи один раз
                 .flatMapMany(tasks -> {
                     // Сначала уведомляем
-                    return notificationService.checkAndNotify(tasks, nowUtc)
+                    return notificationService.checkAndNotify(nowUtc, notificationController)
                             .thenMany(Flux.fromIterable(tasks)
                                     .flatMap(task -> sendNotification(task.getUserId(), task.getDescription())
                                             .then(repeatingTaskService.processCompletedTask(task, now))));

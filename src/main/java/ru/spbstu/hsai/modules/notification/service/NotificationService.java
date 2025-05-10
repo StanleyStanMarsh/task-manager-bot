@@ -1,44 +1,34 @@
 package ru.spbstu.hsai.modules.notification.service;
 
-import org.bson.Document;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
+import org.springframework.data.mongodb.core.aggregation.ConvertOperators;
+import org.springframework.data.mongodb.core.aggregation.LookupOperation;
+import org.springframework.data.mongodb.core.aggregation.MatchOperation;
+import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
+import org.springframework.data.mongodb.core.aggregation.UnwindOperation;
 import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.modules.notification.controller.NotificationController;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
-import ru.spbstu.hsai.api.commands.notifier.TelegramNotifySender;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.LookupOperation;
-import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
-import org.springframework.data.mongodb.core.aggregation.ConvertOperators;
-import org.springframework.data.mongodb.core.aggregation.MatchOperation;
-import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
-import org.springframework.data.mongodb.core.aggregation.UnwindOperation;
 
 import java.time.*;
-import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
-
-
-
 @Service
 public class NotificationService {
-    private static final Logger logger = LoggerFactory.getLogger(NotificationService.class);
-    private final RepeatingTaskService repeatingTaskService; //повторяющиеся задачи
+
+    private final RepeatingTaskService repeatingTaskService;
     private final UserService userService;
-    private final TelegramNotifySender notifySender;
     private final SimpleTaskService taskService;
     private static final List<String> SUPPORTED_ZONES = List.of(
             "Europe/Kaliningrad", "Europe/Moscow", "Europe/Samara",
@@ -52,11 +42,9 @@ public class NotificationService {
 
     public NotificationService(
             UserService userService,
-            TelegramNotifySender notifySender,
             SimpleTaskService taskService,
             RepeatingTaskService repeatingTaskService) {
         this.userService = userService;
-        this.notifySender = notifySender;
         this.taskService = taskService;
         this.repeatingTaskService = repeatingTaskService;
     }
@@ -68,7 +56,7 @@ public class NotificationService {
 
     // Проверка задач с напоминанием за день (в 00:00)
     public Flux<SimpleTask> findTasksForDayReminder(Instant nowUtc) {
-        return aggregateTasksForReminder(nowUtc, "ONE_DAY_BEFORE", Duration.ofDays(1), 0);//
+        return aggregateTasksForReminder(nowUtc, "ONE_DAY_BEFORE", Duration.ofDays(1), 0);
     }
 
     // Проверка задач с напоминанием за неделю (в 00:00)
@@ -76,10 +64,10 @@ public class NotificationService {
         return aggregateTasksForReminder(nowUtc, "ONE_WEEK_BEFORE", Duration.ofDays(7), 0);
     }
 
-
     public Flux<SimpleTask> findTasksForOverdueReminder(Instant nowUtc) {
         return aggregateTasksForOverdueReminder(nowUtc, Duration.ofDays(1), 0);
     }
+
     private Flux<SimpleTask> aggregateTasksForOverdueReminder(Instant nowUtc, Duration overdueOffset, int targetHour) {
         return Flux.fromIterable(SUPPORTED_ZONES)
                 .filter(zone -> isTargetTime(nowUtc, targetHour, zone))
@@ -104,20 +92,15 @@ public class NotificationService {
         ZonedDateTime reminderTime = nowZoned.withHour(targetHour).withMinute(0).withSecond(0).withNano(0);
         ZonedDateTime overdueDate = reminderTime.minus(overdueOffset);
 
-        // Устанавливаем московское время (Europe/Moscow) и время 21:00
-        ZonedDateTime overdueDate1 = overdueDate.toLocalDate()
-                .atTime(0, 0) // Устанавливаем время 21:00
+        ZonedDateTime overdueDateMoscow = overdueDate.toLocalDate()
+                .atTime(0, 0)
                 .atZone(ZoneId.of("Europe/Moscow"));
 
-        Instant overdueLikeDB = overdueDate1.toInstant();
+        Instant overdueLikeDB = overdueDateMoscow.toInstant();
 
-        System.out.println("Overdue date: " + overdueLikeDB);
-        System.out.println("Zone: " + zone);
-
-        // Этап 1: Фильтрация задач с просроченным дедлайном
         MatchOperation matchOverdueTasks = Aggregation.match(
-                Criteria.where("deadline").is(overdueLikeDB) // Фильтр по точной дате
-                        .and("isCompleted").is(false) // Только незавершённые задачи
+                Criteria.where("deadline").is(overdueLikeDB)
+                        .and("isCompleted").is(false)
         );
 
         // Этап 2: Подтягивание данных пользователя
@@ -140,8 +123,6 @@ public class NotificationService {
                 Criteria.where("user.timezone").is(zone)
         );
 
-
-
         return new AggregationOperation[]{
                 matchOverdueTasks,
                 project,
@@ -150,12 +131,11 @@ public class NotificationService {
                 matchTimezone
         };
     }
+
     private Flux<SimpleTask> aggregateTasksForReminder(Instant nowUtc, String reminderType, Duration reminderOffset, int targetHour) {
-        System.out.println("vze");
         return Flux.fromIterable(SUPPORTED_ZONES)
                 .filter(zone -> isTargetTime(nowUtc, targetHour, zone))
                 .flatMap(zone -> {
-                    System.out.println("тут");
                     Aggregation aggregation = Aggregation.newAggregation(
                             createAggregationForZone(nowUtc, reminderType, reminderOffset, targetHour, zone)
                     );
@@ -170,10 +150,7 @@ public class NotificationService {
                 nowZoned.getSecond() == 0;
     }
 
-
-
     private AggregationOperation[] createAggregationForZone(Instant nowUtc, String reminderType, Duration reminderOffset, int targetHour, String zone) {
-        System.out.println("тут1");
         ZoneId zoneId = ZoneId.of(zone);
         ZonedDateTime nowZoned = nowUtc.atZone(zoneId);
 
@@ -188,17 +165,12 @@ public class NotificationService {
 
         // Устанавливаем московское время (Europe/Moscow) и время 21:00
         ZonedDateTime deadlineMoscowTime = deadlineTime.toLocalDate()
-                .atTime(0, 0) // Устанавливаем время 21:00
+                .atTime(0, 0)
                 .atZone(ZoneId.of("Europe/Moscow"));
 
         Instant deadlineStart = deadlineMoscowTime.toInstant();
         Instant deadlineEnd = deadlineMoscowTime.plus(Duration.ofMinutes(1)).toInstant();
 
-        System.out.println(reminderTime);
-        System.out.println(deadlineTime);
-        System.out.println(deadlineStart);
-
-        // Этап 1: Фильтрация задач по дедлайну и типу напоминания
         MatchOperation matchTasks = Aggregation.match(
                 Criteria.where("deadline")
                         .gte(Date.from(deadlineStart))
@@ -210,16 +182,15 @@ public class NotificationService {
 
         // Шаг 1.5: Подтягивание данных пользователя
         ProjectionOperation project = Aggregation.project("userId", "description", "deadline", "reminder", "complexity", "isCompleted")
-                // приводим строку к ObjectId
                 .and(ConvertOperators.ToObjectId.toObjectId("$userId"))
                 .as("userIdObjectId");
 
         // Шаг 2: Создаём LookupOperation
         LookupOperation lookupUser = LookupOperation.newLookup()
-                .from("users") // коллекция пользователей
-                .localField("userIdObjectId") // новое поле с ObjectId
-                .foreignField("_id") // поле в users
-                .as("user"); // куда положить результат (массив)
+                .from("users")
+                .localField("userIdObjectId")
+                .foreignField("_id")
+                .as("user");
 
         UnwindOperation unwindUser = Aggregation.unwind("user");
 
@@ -228,8 +199,6 @@ public class NotificationService {
         MatchOperation matchTimezone = Aggregation.match(
                 Criteria.where("user.timezone").is(zone)
         );
-
-
 
         return new AggregationOperation[]{
                 matchTasks,
@@ -240,91 +209,20 @@ public class NotificationService {
         };
     }
 
+    public Mono<Void> checkAndNotify(Instant nowUtc, NotificationController controller) {
+        return repeatingTaskService.getAllTasksToExecute()
+                .collectList()
+                .flatMap(tasks -> {
+                    Flux<Void> oneTime = Flux.merge(
+                            findTasksForHourReminder(nowUtc).flatMap(t -> controller.sendNotification(t, false)),
+                            findTasksForDayReminder(nowUtc).flatMap(t -> controller.sendNotification(t, false)),
+                            findTasksForWeekReminder(nowUtc).flatMap(t -> controller.sendNotification(t, false)),
+                            findTasksForOverdueReminder(nowUtc).flatMap(t -> controller.sendNotification(t, true))
+                    );
 
+                    Flux<Void> repeating = controller.sendRepeatingTaskReminders(tasks, nowUtc);
 
-
-    public Flux<Void> sendRepeatingTaskReminders(List<RepeatingTask> repeatingTasks, Instant nowUtc) {
-
-        return Flux.fromIterable(repeatingTasks)
-                .flatMap(rt -> userService.findById(rt.getUserId())
-                        .flatMap(user -> {
-
-                            ZoneId userZone = ZoneId.of(user.getTimezone());
-                            ZonedDateTime nextExecZoned = rt.getNextExecution()
-                                    .atZone(ZoneId.of("Europe/Moscow"))
-                                    .withZoneSameInstant(userZone);
-                            System.out.println(rt.getNextExecution());
-                            System.out.println(nextExecZoned);
-
-
-                            String time = nextExecZoned.toLocalTime()
-                                    .format(DateTimeFormatter.ofPattern("HH:mm"));
-                            String msg = "🔄 Повторяющаяся задача:" +
-                                    "\n🆔 ID: " + rt.getId() +
-                                    "\n📌 " + rt.getDescription() +
-                                    "\n⏰ Выполнение: " + time;
-
-                            return notifySender.sendNotification(user.getTelegramId(), msg)
-                                    .then(repeatingTaskService.processCompletedTask(
-                                            rt,
-                                            LocalDateTime.ofInstant(nowUtc, userZone)
-                                    ))
-                                    .then();
-                        })
-                        .onErrorResume(e -> {
-                            logger.error("Ошибка при обработке задачи: {}", e.getMessage());
-                            return Mono.empty();
-                        })
-                )
-                .thenMany(Flux.empty()); // Явное преобразование в Flux<Void>
+                    return Flux.merge(oneTime, repeating).then();
+                });
     }
-
-
-
-    // === Combined execution ===
-    public Mono<Void> checkAndNotify(List<RepeatingTask> repeatingTasks, Instant nowUtc) {
-        Flux<Void> oneTime = Flux.merge(
-                findTasksForHourReminder(nowUtc).flatMap(t -> sendNotification(t, false)),
-                findTasksForDayReminder(nowUtc).flatMap(t -> sendNotification(t, false)),
-                findTasksForWeekReminder(nowUtc).flatMap(t -> sendNotification(t, false)),
-                findTasksForOverdueReminder(nowUtc).flatMap(t -> sendNotification(t, true))
-        );
-
-        Flux<Void> repeating = sendRepeatingTaskReminders(repeatingTasks, nowUtc);
-
-        return Flux.merge(oneTime, repeating).then();
-    }
-
-
-
-
-
-
-
-
-    private String buildReminderMessage(SimpleTask task, ZoneId userZone, boolean isOverdue) {
-        LocalDate deadline = task.getDeadline();
-        if (isOverdue) {
-            return "⚡️ Дедлайн задачи истек!"
-                    + "\n🆔 ID: " + task.getId()
-                    + "\n📌 Описание: " + task.getDescription()
-                    + "\n Не забудьте отметить задачу завершенной или обновить дедлайн при необходимости.";
-        } else {
-            return "🔔 Напоминание!"
-                    + "\n🆔 ID: " + task.getId()
-                    + "\n📌 Описание: " + task.getDescription()
-                    + "\n❗️ Дедлайн: " + deadline.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
-        }
-    }
-
-    private Mono<Void> sendNotification(SimpleTask task, boolean isOverdue) {
-        return userService.findById(task.getUserId())
-                .flatMap(user -> {
-                    ZoneId userZone = ZoneId.of(user.getTimezone());
-                    String message = buildReminderMessage(task, userZone, isOverdue);
-                    return notifySender.sendNotification(user.getTelegramId(), message);
-                })
-                .then();
-    }
-
 }
