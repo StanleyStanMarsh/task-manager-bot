@@ -53,7 +53,7 @@ public class TodayCommand implements TelegramCommand{
         userService.findByTelegramId(tgUser.getId())
                 .flatMap(user -> {
                     ZoneId zoneId = ZoneId.of(user.getTimezone()); // поле ZoneId должно быть в User
-                    Mono<List<SimpleTask>> simpleTasks = taskService.getTodayTasks(user.getId()).collectList();
+                    Mono<List<SimpleTask>> simpleTasks = taskService.getTodayTasks(user.getId(), zoneId).collectList();
                     Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getTodayTasks(user.getId(), zoneId).collectList();
                     Mono<String> timezone = Mono.just(user.getTimezone());
                     return Mono.zip(simpleTasks, repeatingTasks, timezone);
