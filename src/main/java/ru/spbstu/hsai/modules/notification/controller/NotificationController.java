@@ -98,7 +98,7 @@ public class NotificationController {
                                     .format(DateTimeFormatter.ofPattern("HH:mm"));
                             String msg = "🔄 Повторяющаяся задача:" +
                                     "\n🆔 ID: " + rt.getId() +
-                                    "\n📌 Описание:" + rt.getDescription() +
+                                    "\n📌 Описание: " + rt.getDescription() +
                                     "\n⏰ Выполнение: " + time;
 
                             return notifySender.sendNotification(user.getTelegramId(), msg)
