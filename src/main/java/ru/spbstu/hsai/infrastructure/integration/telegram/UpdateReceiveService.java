@@ -3,7 +3,7 @@ package ru.spbstu.hsai.infrastructure.integration.telegram;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
 
 @Component
 public class UpdateReceiveService {

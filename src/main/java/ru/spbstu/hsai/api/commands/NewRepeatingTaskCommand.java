@@ -10,13 +10,12 @@ import ru.spbstu.hsai.api.commands.utils.TaskValidation;
 import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationContext;
 import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationState;
 import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationStep;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTaskInterface;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -24,14 +23,14 @@ import java.time.format.DateTimeFormatter;
 
 @Component
 public class NewRepeatingTaskCommand implements TelegramCommand{
-    private final TelegramSenderService sender;
-    private final UserService userService;
-    private final RepeatingTaskService taskService;
+    private final MessageSender sender;
+    private final UserServiceInterface userService;
+    private final RepeatingTaskInterface taskService;
     private final RepeatingTaskCreationContext creationContext;
 
-    public NewRepeatingTaskCommand(TelegramSenderService sender,
-                                   UserService userService,
-                                   RepeatingTaskService taskService,
+    public NewRepeatingTaskCommand(MessageSender sender,
+                                   UserServiceInterface userService,
+                                   RepeatingTaskInterface taskService,
                                    RepeatingTaskCreationContext creationContext) {
         this.sender = sender;
         this.userService = userService;

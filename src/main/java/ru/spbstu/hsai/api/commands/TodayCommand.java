@@ -10,33 +10,31 @@ import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
 import ru.spbstu.hsai.api.commands.utils.FormattedSimpleTask;
 import ru.spbstu.hsai.api.commands.utils.StringSplitter;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
-import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTaskInterface;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTask;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTaskInterface;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 
-import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 
 @Component
 public class TodayCommand implements TelegramCommand{
-    private final TelegramSenderService sender;
-    private final UserService userService;
-    private final SimpleTaskService taskService;
-    private final RepeatingTaskService repeatingTaskService;
+    private final MessageSender sender;
+    private final UserServiceInterface userService;
+    private final SimpleTaskInterface taskService;
+    private final RepeatingTaskInterface repeatingTaskService;
 
-    public TodayCommand(TelegramSenderService sender,
-                        UserService userService,
-                        SimpleTaskService taskService,
-                        RepeatingTaskService repeatingTaskService) {
+    public TodayCommand(MessageSender sender,
+                        UserServiceInterface userService,
+                        SimpleTaskInterface taskService,
+                        RepeatingTaskInterface repeatingTaskService) {
         this.sender = sender;
         this.userService = userService;
         this.taskService = taskService;

@@ -5,9 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import reactor.core.Disposable;
 import reactor.core.scheduler.Schedulers;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
+import ru.spbstu.hsai.usermanagement.service.UserService;
 
 import javax.annotation.PostConstruct;
 
@@ -16,7 +16,7 @@ public class SuperAdminInitializer {
 
     private static final Logger log = LoggerFactory.getLogger(SuperAdminInitializer.class);
 
-    private final UserService userService;
+    private final UserServiceInterface userService;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${superadmin.telegramId}")
@@ -30,7 +30,7 @@ public class SuperAdminInitializer {
     @Value("${superadmin.password}")
     private String rawPassword;
 
-    public SuperAdminInitializer(UserService userService,
+    public SuperAdminInitializer(UserServiceInterface userService,
                                  PasswordEncoder passwordEncoder) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;

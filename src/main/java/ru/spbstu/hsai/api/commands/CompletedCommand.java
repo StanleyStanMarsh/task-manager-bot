@@ -6,21 +6,21 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
-import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTask;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTaskInterface;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
 
 @Component
 public class CompletedCommand implements TelegramCommand {
-    private final TelegramSenderService sender;
-    private final UserService userService;
-    private final SimpleTaskService taskService;
+    private final MessageSender sender;
+    private final UserServiceInterface userService;
+    private final SimpleTaskInterface taskService;
 
-    public CompletedCommand(TelegramSenderService sender,
-                          UserService userService,
-                          SimpleTaskService taskService) {
+    public CompletedCommand(MessageSender sender,
+                            UserServiceInterface userService,
+                            SimpleTaskInterface taskService) {
         this.sender = sender;
         this.userService = userService;
         this.taskService = taskService;

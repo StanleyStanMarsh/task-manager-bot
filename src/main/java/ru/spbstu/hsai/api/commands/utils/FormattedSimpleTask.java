@@ -1,6 +1,6 @@
 package ru.spbstu.hsai.api.commands.utils;
 
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTask;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;

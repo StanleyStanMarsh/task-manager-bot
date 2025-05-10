@@ -1,6 +1,6 @@
 package ru.spbstu.hsai.api.context.simpleTaskUpdate;
 
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTask;
 
 import java.time.LocalDate;
 

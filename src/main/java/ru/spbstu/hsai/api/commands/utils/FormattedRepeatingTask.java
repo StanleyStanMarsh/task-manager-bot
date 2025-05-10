@@ -1,6 +1,6 @@
 package ru.spbstu.hsai.api.commands.utils;
 
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;

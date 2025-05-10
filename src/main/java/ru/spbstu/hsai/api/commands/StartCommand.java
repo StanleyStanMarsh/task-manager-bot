@@ -7,19 +7,19 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
 
 @Component
 public class StartCommand implements TelegramCommand {
 
-    private final TelegramSenderService sender;
-    private final UserService userService;
+    private final MessageSender sender;
+    private final UserServiceInterface userService;
     private final TimezoneCommand timezoneCommand;
 
     @Autowired
-    public StartCommand(TelegramSenderService sender, UserService userService, TimezoneCommand timezoneCommand) {
+    public StartCommand(MessageSender sender, UserServiceInterface userService, TimezoneCommand timezoneCommand) {
         this.sender = sender;
         this.userService = userService;
         this.timezoneCommand = timezoneCommand;

@@ -10,17 +10,16 @@ import ru.spbstu.hsai.api.commands.utils.TaskValidation;
 import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateContext;
 import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateState;
 import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateStep;
-import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationStep;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateContext;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateState;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateStep;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
-import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
-import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTaskInterface;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTask;
+import ru.spbstu.hsai.simpletaskmanagment.SimpleTaskInterface;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,18 +29,18 @@ import java.time.format.DateTimeFormatter;
 
 @Component
 public class UpdateTaskCommand implements TelegramCommand {
-    private final TelegramSenderService sender;
-    private final UserService userService;
-    private final SimpleTaskService taskService;
+    private final MessageSender sender;
+    private final UserServiceInterface userService;
+    private final SimpleTaskInterface taskService;
     private final SimpleTaskUpdateContext updateContext;
-    private final RepeatingTaskService repeatingTaskService;
+    private final RepeatingTaskInterface repeatingTaskService;
     private final RepeatingTaskUpdateContext repeatingTaskUpdateContext;
 
-    public UpdateTaskCommand(TelegramSenderService sender,
-                             UserService userService,
-                             SimpleTaskService taskService,
+    public UpdateTaskCommand(MessageSender sender,
+                             UserServiceInterface userService,
+                             SimpleTaskInterface taskService,
                              SimpleTaskUpdateContext updateContext,
-                             RepeatingTaskService repeatingTaskService,
+                             RepeatingTaskInterface repeatingTaskService,
                              RepeatingTaskUpdateContext repeatingTaskUpdateContext) {
         this.sender = sender;
         this.userService = userService;

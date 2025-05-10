@@ -8,7 +8,7 @@ import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
-import ru.spbstu.hsai.infrastructure.server.BotProperties;
+import ru.spbstu.hsai.infrastructure.BotProperties;
 
 import javax.annotation.PostConstruct;
 import java.util.List;

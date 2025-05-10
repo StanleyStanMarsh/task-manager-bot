@@ -7,9 +7,9 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.usermanagement.service.UserService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.usermanagement.UserServiceInterface;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,8 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class TimezoneCommand implements TelegramCommand {
 
-    private final TelegramSenderService sender;
-    private final UserService userService;
+    private final MessageSender sender;
+    private final UserServiceInterface userService;
     private final ConcurrentHashMap<Long, Boolean> awaitingTimezoneUsers;
     private static final Map<String, String> TIMEZONE_MAPPING = Map.ofEntries(
             Map.entry("МСК-1", "Europe/Kaliningrad"),
@@ -35,7 +35,7 @@ public class TimezoneCommand implements TelegramCommand {
     );
 
     @Autowired
-    public TimezoneCommand(TelegramSenderService sender, UserService userService) {
+    public TimezoneCommand(MessageSender sender, UserServiceInterface userService) {
         this.sender = sender;
         this.userService = userService;
         this.awaitingTimezoneUsers = new ConcurrentHashMap<>();

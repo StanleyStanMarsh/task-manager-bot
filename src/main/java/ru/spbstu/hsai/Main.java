@@ -1,31 +1,39 @@
 package ru.spbstu.hsai;
 
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.modulith.Modulithic;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import ru.spbstu.hsai.infrastructure.config.SchedulerConfig;
-import ru.spbstu.hsai.infrastructure.server.ServerApp;
-import ru.spbstu.hsai.infrastructure.server.BotApp;
+import ru.spbstu.hsai.config.MongoConfig;
+import ru.spbstu.hsai.config.SecurityConfig;
+import ru.spbstu.hsai.config.WebConfig;
+import ru.spbstu.hsai.infrastructure.BotStarter;
+import ru.spbstu.hsai.infrastructure.ServerStarter;
+import ru.spbstu.hsai.config.SchedulerConfig;
 
 import java.util.Arrays;
 import java.util.concurrent.*;
 
+@Modulithic
 @EnableScheduling
 public class Main {
     public static void main(String[] args) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
-                ru.spbstu.hsai.infrastructure.config.WebConfig.class,
-                ru.spbstu.hsai.infrastructure.config.MongoConfig.class,
-                ru.spbstu.hsai.infrastructure.config.SecurityConfig.class,
-                ru.spbstu.hsai.infrastructure.config.MongoConfig.class,
+                WebConfig.class,
+                MongoConfig.class,
+                SecurityConfig.class,
+                MongoConfig.class,
                 SchedulerConfig.class
         );
 
         CountDownLatch latch = new CountDownLatch(1);
 
         try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            BotStarter bot = context.getBean(BotStarter.class);
+            ServerStarter server = context.getBean(ServerStarter.class);
+
             executor.submit(() -> {
                 try {
-                    ServerApp.start(context);
+                    server.start(context);
                 } catch (Exception e) {
                     System.err.println("Ошибка сервера: " + e.getMessage());
                     latch.countDown();
@@ -34,7 +42,7 @@ public class Main {
 
             executor.submit(() -> {
                 try {
-                    BotApp.start(context);
+                    bot.start(context);
                 } catch (Exception e) {
                     System.err.println("Ошибка бота: " + Arrays.toString(e.getStackTrace()));
                     latch.countDown();

@@ -6,11 +6,12 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.core.MessageSender;
 
 import java.util.concurrent.CompletableFuture;
 
 @Component
-public class TelegramSenderService {
+public class TelegramSenderService implements MessageSender {
     private final DefaultAbsSender sender;
 
     public TelegramSenderService(TelegramBotAdapter botAdapter) {

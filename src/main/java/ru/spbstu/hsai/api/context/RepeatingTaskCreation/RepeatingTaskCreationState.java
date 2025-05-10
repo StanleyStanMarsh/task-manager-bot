@@ -1,7 +1,7 @@
 package ru.spbstu.hsai.api.context.RepeatingTaskCreation;
 
 
-import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
+import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
 import java.time.LocalDateTime;
 
 

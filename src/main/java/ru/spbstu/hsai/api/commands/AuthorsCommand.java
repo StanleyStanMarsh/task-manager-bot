@@ -5,17 +5,17 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
-import ru.spbstu.hsai.modules.authors.service.AuthorsService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
+import ru.spbstu.hsai.authors.AuthorsService;
 
 @Component
 public class AuthorsCommand implements TelegramCommand {
 
-    private final TelegramSenderService sender;
+    private final MessageSender sender;
     private final AuthorsService authorsService;
 
-    public AuthorsCommand(TelegramSenderService sender,
+    public AuthorsCommand(MessageSender sender,
                           AuthorsService authorsService) {
         this.sender = sender;
         this.authorsService = authorsService;

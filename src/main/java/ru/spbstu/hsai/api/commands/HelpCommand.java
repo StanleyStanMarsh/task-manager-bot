@@ -6,15 +6,15 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
-import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
+import ru.spbstu.hsai.api.UpdateReceivedEvent;
+import ru.spbstu.hsai.core.MessageSender;
 
 @Component
 public class HelpCommand implements TelegramCommand {
 
-    private final TelegramSenderService sender;
+    private final MessageSender sender;
 
-    public HelpCommand(TelegramSenderService sender) {
+    public HelpCommand(MessageSender sender) {
         this.sender = sender;
     }
 
