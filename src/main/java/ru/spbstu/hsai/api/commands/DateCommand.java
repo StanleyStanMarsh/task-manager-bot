@@ -8,6 +8,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
+import ru.spbstu.hsai.api.commands.utils.FormattedSimpleTask;
 import ru.spbstu.hsai.api.commands.utils.StringSplitter;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
@@ -106,8 +107,10 @@ public class DateCommand implements TelegramCommand{
                             sb.append("📋 Ваши задачи на " + formattedDate + ":\n\n");
                             int counter = 1;
                             for (SimpleTask task : simpleTasks) {
+                                FormattedSimpleTask ft = new FormattedSimpleTask(task);
                                 sb.append(counter++).append(". ")
-                                        .append(task.toString()).append("\n\n");
+                                        .append(ft.format(ZoneId.of(timezone)))
+                                        .append("\n\n");
                             }
                         }
 
@@ -122,8 +125,9 @@ public class DateCommand implements TelegramCommand{
                             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
                             for (RepeatingTask task : repeatingTasks) {
+                                FormattedRepeatingTask ft = new FormattedRepeatingTask(task);
                                 sb.append(counter++).append(". ")
-                                        .append(FormattedRepeatingTask.format(task, ZoneId.of(timezone)))
+                                        .append(ft.format(ZoneId.of(timezone)))
                                         .append("\n\n");
                             }
 

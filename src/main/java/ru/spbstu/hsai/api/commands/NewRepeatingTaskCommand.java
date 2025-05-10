@@ -208,7 +208,9 @@ public class NewRepeatingTaskCommand implements TelegramCommand{
 //                    String successMessage = "✅Задача создана!\n" + task.toString() +
 //                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";
                     // выводим корректный пояс
-                    String successMessage = FormattedRepeatingTask.format(task, userZoneId);
+                    FormattedRepeatingTask ft = new FormattedRepeatingTask(task);
+
+                    String successMessage = ft.format(userZoneId);
 
                     SendMessage response = new SendMessage(chatId.toString(), successMessage);
                     response.enableHtml(true);

@@ -6,8 +6,19 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
-public class FormattedRepeatingTask {
-    public static String format(RepeatingTask task, ZoneId userZoneId) {
+public class FormattedRepeatingTask implements FormattedTask {
+
+    private final RepeatingTask task;
+    private static final ZoneId MSK = ZoneId.of("Europe/Moscow");
+    private static final DateTimeFormatter DATE_TIME_FMT =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    public FormattedRepeatingTask(RepeatingTask task) {
+        this.task = task;
+    }
+
+    @Override
+    public String format(ZoneId userZoneId) {
         ZonedDateTime taskMoscowZonedStartDateTime = task.getStartDateTime().atZone(ZoneId.of("Europe/Moscow"));
         ZonedDateTime taskUserZonedStartDateTime = taskMoscowZonedStartDateTime.withZoneSameInstant(userZoneId);
 
