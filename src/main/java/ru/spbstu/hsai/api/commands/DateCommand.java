@@ -15,6 +15,8 @@ import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
@@ -62,24 +64,28 @@ public class DateCommand implements TelegramCommand{
         try {
             LocalDate date = LocalDate.parse(dateString, dateFormatter);
 
-            if (date.isBefore(LocalDate.now())) {
-                sender.sendAsync(new SendMessage(chatId.toString(),
-                        "❌ Нельзя посмотреть задачи за прошедшие даты. Укажите текущую или будущую дату."));
-                return;
-            }
-
             userService.findByTelegramId(tgUser.getId())
                     .flatMap(user -> {
+                        ZoneId zoneId = ZoneId.of(user.getTimezone()); // <-- получаем часовой пояс
+                        LocalDate todayInZone = LocalDate.now(zoneId);
+
+                        if (date.isBefore(todayInZone)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Нельзя посмотреть задачи за прошедшие даты. Укажите текущую или будущую дату."));
+                            return Mono.empty();
+                        }
                         Mono<List<SimpleTask>> simpleTasks = taskService
                                 .getTasksByDate(user.getId(), date).collectList();
                         Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService
-                                .getTasksByDate(user.getId(), date).collectList();
+                                .getTasksByDate(user.getId(), date, zoneId).collectList();
+                        Mono<String> timezone = Mono.just(user.getTimezone());
 
-                        return Mono.zip(simpleTasks, repeatingTasks);
+                        return Mono.zip(simpleTasks, repeatingTasks, timezone);
                     })
                     .subscribe(tuple -> {
                         List<SimpleTask> simpleTasks = tuple.getT1();
                         List<RepeatingTask> repeatingTasks = tuple.getT2();
+                        String timezone = tuple.getT3();
 
                         String formattedDate = date.format(dateFormatter);
 
@@ -110,10 +116,26 @@ public class DateCommand implements TelegramCommand{
                             sb.append("🔁 Периодические задачи:\n\n");
                             repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                             int counter = 1;
+                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
                             for (RepeatingTask task : repeatingTasks) {
-                                sb.append(counter++).append(". ")
-                                        .append(task.toString()).append("\n\n");
+                                ZonedDateTime startInUserZone = task.getStartDateTime()
+                                        .atZone(ZoneId.of("Europe/Moscow"))
+                                        .withZoneSameInstant(ZoneId.of(timezone));
+                                ZonedDateTime nextExecutionInUserZone = task.getNextExecution()
+                                        .atZone(ZoneId.of("Europe/Moscow"))
+                                        .withZoneSameInstant(ZoneId.of(timezone)); // теперь используем доступный timezone
+
+                                sb.append(counter++).append(".\n")
+                                        .append("🆔 ID: <code>").append(task.getId()).append("</code>\n")
+                                        .append("📌 Описание: ").append(task.getDescription()).append("\n")
+                                        .append("📊 Сложность: ").append(task.getComplexity()).append("\n")
+                                        .append("🔁 Периодичность: ").append(task.getFrequency().getDisplayName()).append("\n")
+                                        .append("🕒 Начало: ").append(startInUserZone.format(formatter)).append("\n")
+                                        .append("⏳ Следующее выполнение: ").append(nextExecutionInUserZone.format(formatter))
+                                        .append("\n\n");
                             }
+
                         }
 
                         sb.append("\nЕсли хотите вернуться к списку команд, используйте /help");

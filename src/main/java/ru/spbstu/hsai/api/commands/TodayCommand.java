@@ -15,6 +15,10 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 
@@ -48,14 +52,16 @@ public class TodayCommand implements TelegramCommand{
 
         userService.findByTelegramId(tgUser.getId())
                 .flatMap(user -> {
+                    ZoneId zoneId = ZoneId.of(user.getTimezone()); // поле ZoneId должно быть в User
                     Mono<List<SimpleTask>> simpleTasks = taskService.getTodayTasks(user.getId()).collectList();
-                    Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getTodayTasks(user.getId()).collectList();
-
-                    return Mono.zip(simpleTasks, repeatingTasks);
+                    Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getTodayTasks(user.getId(), zoneId).collectList();
+                    Mono<String> timezone = Mono.just(user.getTimezone());
+                    return Mono.zip(simpleTasks, repeatingTasks, timezone);
                 })
                 .subscribe(tuple -> {
                     List<SimpleTask> simpleTasks = tuple.getT1();
                     List<RepeatingTask> repeatingTasks = tuple.getT2();
+                    String timezone = tuple.getT3();
 
                     if (simpleTasks.isEmpty() && repeatingTasks.isEmpty()) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
@@ -84,9 +90,24 @@ public class TodayCommand implements TelegramCommand{
                         sb.append("🔁 Периодические задачи:\n\n");
                         repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                         int counter = 1;
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
                         for (RepeatingTask task : repeatingTasks) {
-                            sb.append(counter++).append(". ")
-                                    .append(task.toString()).append("\n\n");
+                            ZonedDateTime startInUserZone = task.getStartDateTime()
+                                    .atZone(ZoneId.of("Europe/Moscow"))
+                                    .withZoneSameInstant(ZoneId.of(timezone));
+                            ZonedDateTime nextExecutionInUserZone = task.getNextExecution()
+                                    .atZone(ZoneId.of("Europe/Moscow"))
+                                    .withZoneSameInstant(ZoneId.of(timezone)); // теперь используем доступный timezone
+
+                            sb.append(counter++).append(".\n")
+                                    .append("🆔 ID: <code>").append(task.getId()).append("</code>\n")
+                                    .append("📌 Описание: ").append(task.getDescription()).append("\n")
+                                    .append("📊 Сложность: ").append(task.getComplexity()).append("\n")
+                                    .append("🔁 Периодичность: ").append(task.getFrequency().getDisplayName()).append("\n")
+                                    .append("🕒 Начало: ").append(startInUserZone.format(formatter)).append("\n")
+                                    .append("⏳ Следующее выполнение: ").append(nextExecutionInUserZone.format(formatter))
+                                    .append("\n\n");
                         }
                     }
 

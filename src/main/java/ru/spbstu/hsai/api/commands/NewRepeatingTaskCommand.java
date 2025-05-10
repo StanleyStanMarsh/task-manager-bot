@@ -16,6 +16,9 @@ import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskServic
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Component
 public class NewRepeatingTaskCommand implements TelegramCommand{
@@ -126,18 +129,40 @@ public class NewRepeatingTaskCommand implements TelegramCommand{
                     break;
 
                 case START_DATE:
-                    LocalDateTime startdatetime = TaskValidation.parseDateTime(input);
-                    if (startdatetime == null || startdatetime.isBefore(LocalDateTime.now())) {
+                    LocalDateTime userInputDateTime = TaskValidation.parseDateTime(input);
+                    if (userInputDateTime == null) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
-                                        "не ранее текущего момента.\n" +
+                                "❌ Укажите дату и время в формате дд.мм.гггг чч:мм.\n" +
                                         "Повторите ввод."));
                         return;
                     }
 
-                    state.setStartDateTime(startdatetime);
-                    completeTaskCreation(chatId, state);
-                    break;
+                    userService.findByTelegramId(chatId).subscribe(user -> {
+                        ZoneId userZone = ZoneId.of(user.getTimezone());
+                        LocalDateTime currentUserTime = LocalDateTime.now(userZone);
+
+                        ZonedDateTime userZonedDateTime = userInputDateTime.atZone(userZone);
+                        ZonedDateTime moscowZonedDateTime = userZonedDateTime.withZoneSameInstant(ZoneId.of("Europe/Moscow"));
+                        LocalDateTime moscowTime = moscowZonedDateTime.toLocalDateTime();
+
+                        if (userInputDateTime.isBefore(currentUserTime)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
+                                            "не ранее текущего момента.\n" +
+                                            "Повторите ввод.\n" +
+                                            "Текущее время по вашему часовому поясу: " + currentUserTime.format(DateTimeFormatter.ofPattern("HH:mm"))));
+                            return;
+                        }
+
+                        state.setStartDateTime(moscowTime);
+                        creationContext.updateState(chatId, state);
+                        completeTaskCreation(chatId, state);
+                    }, error -> {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Не удалось получить ваш часовой пояс. Повторите позже."));
+                    });
+                    return;
+
             }
             creationContext.updateState(chatId, state);
         } catch (NumberFormatException e) {

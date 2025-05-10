@@ -7,9 +7,7 @@ import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.repository.RepeatingTaskRepository;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.*;
 
 @Service
 public class RepeatingTaskService {
@@ -60,29 +58,41 @@ public class RepeatingTaskService {
 
 
     // задачи на сегодня
-    public Flux<RepeatingTask> getTodayTasks(String userId) {
-        LocalDate today = LocalDate.now();
-        LocalDateTime startOfDay = today.atStartOfDay();
-        LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
+    public Flux<RepeatingTask> getTodayTasks(String userId, ZoneId userZone ) {
+        ZonedDateTime zonedStart = LocalDate.now(userZone).atStartOfDay(userZone);
+        ZonedDateTime zonedEnd = zonedStart.plusDays(1);
+
+        // Приводим к московскому времени (если база хранит даты в этом виде)
+        LocalDateTime startOfDay = zonedStart.withZoneSameInstant(ZoneId.of("Europe/Moscow")).toLocalDateTime();
+        LocalDateTime endOfDay = zonedEnd.withZoneSameInstant(ZoneId.of("Europe/Moscow")).toLocalDateTime();
 
         return taskRepository.findTasksForDay(userId, startOfDay, endOfDay);
     }
 
-    public Flux<RepeatingTask> getWeekTasks(String userId) {
-        LocalDate monday = LocalDate.now().with(DayOfWeek.MONDAY);
+    public Flux<RepeatingTask> getWeekTasks(String userId, ZoneId userZone) {
+        LocalDate userToday = LocalDate.now(userZone);
+        LocalDate monday = userToday.with(DayOfWeek.MONDAY);
         LocalDate sunday = monday.plusDays(6);
 
-        LocalDateTime startOfWeek = monday.atStartOfDay();
-        LocalDateTime endOfWeek = sunday.atTime(23, 59, 59);
+        ZonedDateTime zonedStart = monday.atStartOfDay(userZone);
+        ZonedDateTime zonedEnd = sunday.plusDays(1).atStartOfDay(userZone);
+        System.out.println(zonedStart);
+        System.out.println(zonedEnd);
+        LocalDateTime startOfWeek = zonedStart.withZoneSameInstant(ZoneId.of("Europe/Moscow")).toLocalDateTime();
+        LocalDateTime endOfWeek = zonedEnd.withZoneSameInstant(ZoneId.of("Europe/Moscow")).toLocalDateTime().minusMinutes(1);
 
         return taskRepository.findTasksForWeek(userId, startOfWeek, endOfWeek);
 
     }
 
     // на указанную дату
-    public Flux<RepeatingTask> getTasksByDate(String userId, LocalDate date) {
-        LocalDateTime startDate = date.atStartOfDay();
-        LocalDateTime endDate = date.plusDays(1).atStartOfDay();
+    public Flux<RepeatingTask> getTasksByDate(String userId, LocalDate date, ZoneId userZone) {
+        ZonedDateTime zonedStart = date.atStartOfDay(userZone);
+        ZonedDateTime zonedEnd = date.plusDays(1).atStartOfDay(userZone);
+
+        // Преобразуем в системное (например, UTC или Moscow) время, если данные в базе в этом виде
+        LocalDateTime startDate = zonedStart.withZoneSameInstant(ZoneId.of("Europe/Moscow")).toLocalDateTime();
+        LocalDateTime endDate = zonedEnd.withZoneSameInstant(ZoneId.of("Europe/Moscow")).toLocalDateTime();
 
         return taskRepository.findTasksForDay(userId, startDate, endDate);
 
