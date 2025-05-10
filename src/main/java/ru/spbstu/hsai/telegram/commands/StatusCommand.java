@@ -1,6 +1,7 @@
 package ru.spbstu.hsai.telegram.commands;
 
 import org.springframework.context.event.EventListener;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -23,17 +24,19 @@ public class StatusCommand implements TelegramCommand {
     private final UserServiceInterface userService;
     private final SimpleTaskInterface taskService;
     private final RepeatingTaskInterface repeatingTaskService;
-    private final boolean isConnectionEstablished;
+    private final ReactiveMongoTemplate mongoTemplate;
+
 
     public StatusCommand(MessageSender sender,
                          UserServiceInterface userService,
                          SimpleTaskInterface taskService,
-                         RepeatingTaskInterface repeatingTaskService) {
+                         RepeatingTaskInterface repeatingTaskService,
+                         ReactiveMongoTemplate mongoTemplate) {
         this.sender = sender;
         this.userService = userService;
         this.taskService = taskService;
         this.repeatingTaskService = repeatingTaskService;
-        this.isConnectionEstablished = true; //todo - пока так, надо реализовать проверку
+        this.mongoTemplate = mongoTemplate; //todo - пока так, надо реализовать проверку
     }
 
     @Override
@@ -48,6 +51,8 @@ public class StatusCommand implements TelegramCommand {
         User tgUser = message.getFrom();
         Long chatId = message.getChatId();
 
+        Mono<Boolean> mongoStatusMono = checkMongoConnection();
+
         userService.findByTelegramId(tgUser.getId())
                 .flatMap(user -> {
                     Mono<List<SimpleTask>> simpleActiveTasks = taskService.getActiveTasks(user.getId())
@@ -57,14 +62,15 @@ public class StatusCommand implements TelegramCommand {
                     Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getActiveTasks(user.getId())
                             .collectList();
 
-                    return Mono.zip(simpleActiveTasks, simpleCompletedTasks, repeatingTasks)
+                    return Mono.zip(simpleActiveTasks, simpleCompletedTasks, repeatingTasks, mongoStatusMono)
                             .map(tuple -> {
                                 int simpleActiveCount = tuple.getT1().size();
                                 int completedCount = tuple.getT2().size();
                                 int repeatingCount = tuple.getT3().size();
                                 int totalActive = simpleActiveCount + repeatingCount;
+                                boolean isConnected = tuple.getT4();
 
-                                return statusMessage(totalActive, completedCount);
+                                return statusMessage(totalActive, completedCount, isConnected);
                             });
                 })
                 .subscribe(
@@ -75,7 +81,7 @@ public class StatusCommand implements TelegramCommand {
     }
 
 
-    private String statusMessage(int activeTasks, int completedTasks) {
+    private String statusMessage(int activeTasks, int completedTasks, boolean isConnected) {
         return """
                📍 Статус Бота:
                
@@ -85,10 +91,15 @@ public class StatusCommand implements TelegramCommand {
                
                Используйте /help для списка команд
                """.formatted(
-                isConnectionEstablished ? "установлено" : "не установлено",
+                isConnected ? "установлено" : "не установлено",
                 activeTasks,
                 completedTasks
         );
+    }
+
+    private Mono<Boolean> checkMongoConnection() {
+        return mongoTemplate.collectionExists("users")
+                .onErrorReturn(false);
     }
 
 }
