@@ -5,8 +5,10 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
+import ru.spbstu.hsai.api.commands.utils.StringSplitter;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
@@ -102,9 +104,19 @@ public class TodayCommand implements TelegramCommand{
 
                     sb.append("\nЕсли хотите вернуться к списку команд, используйте /help");
 
-                    SendMessage messageToSend = new SendMessage(chatId.toString(), sb.toString());
-                    messageToSend.enableHtml(true);
-                    sender.sendAsync(messageToSend);
+                    // Разбиваем на чанки по 4096 символов
+                    List<String> parts = StringSplitter.splitToChunks(sb.toString(), 4000);
+
+                    Flux.fromIterable(parts)
+                            .concatMap(part -> {
+                                SendMessage msg = SendMessage.builder()
+                                        .chatId(chatId.toString())
+                                        .text(part)
+                                        .build();
+                                msg.enableHtml(true);
+                                return sender.sendReactive(msg);
+                            })
+                            .subscribe();
                 }, error -> {
                     sender.sendAsync(new SendMessage(chatId.toString(),
                             "❌ Ошибка при получении задач: " + error.getMessage()));

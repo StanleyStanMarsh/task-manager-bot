@@ -5,8 +5,10 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
+import ru.spbstu.hsai.api.commands.utils.StringSplitter;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
@@ -111,11 +113,19 @@ public class WeekCommand implements TelegramCommand {
 
                     sb.append("\nЕсли хотите вернуться к списку команд, используйте /help");
 
-                    SendMessage messageToSend = new SendMessage(chatId.toString(), sb.toString());
-                    messageToSend.enableHtml(true);
-                    System.out.println("Message length: " + sb.length());
+                    // Разбиваем на чанки по 4096 символов
+                    List<String> parts = StringSplitter.splitToChunks(sb.toString(), 4000);
 
-                    sender.sendAsync(messageToSend);
+                    Flux.fromIterable(parts)
+                            .concatMap(part -> {
+                                SendMessage msg = SendMessage.builder()
+                                        .chatId(chatId.toString())
+                                        .text(part)
+                                        .build();
+                                msg.enableHtml(true);
+                                return sender.sendReactive(msg);
+                            })
+                            .subscribe();
 
                 }, error -> {
                     sender.sendAsync(new SendMessage(chatId.toString(),
