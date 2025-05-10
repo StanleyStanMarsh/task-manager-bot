@@ -24,6 +24,8 @@ public class SimpleTask {
         ONE_DAY_BEFORE("За 1 день"),
         ONE_WEEK_BEFORE("За 1 неделю"),
         NO_REMINDER("Без напоминания");
+        //FIVE_MINUTES_BEFORE("За 5 минут");     //Проверяла напоминания!!
+
 
         private final String displayName;
 

@@ -16,6 +16,8 @@ import ru.spbstu.hsai.modules.simpletaskmanagment.service.SimpleTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 @Component
 public class NewTaskCommand implements TelegramCommand {
@@ -108,16 +110,32 @@ public class NewTaskCommand implements TelegramCommand {
 
                 case DEADLINE:
                     LocalDate deadline = TaskValidation.parseDate(input);
-                    if (deadline == null || deadline.isBefore(LocalDate.now())) {
+                    if (deadline == null) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Укажите дедлайн задачи в формате дд.мм.гггг не ранее текущей даты. " +
-                                        "Повторите ввод."));
+                                "❌ Укажите дедлайн в формате дд.мм.гггг.\nПовторите ввод."));
                         return;
                     }
-                    state.setDeadline(deadline);
-                    state.setCurrentStep(SimpleTaskCreationStep.REMINDER);
-                    askForReminder(chatId);
-                    break;
+
+                    userService.findByTelegramId(chatId).subscribe(user -> {
+                        ZoneId userZone = ZoneId.of(user.getTimezone());
+                        LocalDate currentDate = LocalDate.now(userZone);
+
+                        if (deadline.isBefore(currentDate)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Указанный дедлайн уже прошёл. Сегодня у вас: " +
+                                            currentDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) +
+                                            ". Повторите ввод."));
+                            return;
+                        }
+                        state.setDeadline(deadline);
+                        state.setCurrentStep(SimpleTaskCreationStep.REMINDER);
+                        askForReminder(chatId);
+
+                    }, error -> {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Не удалось определить ваш часовой пояс. Повторите позже."));
+                    });
+                    return;
 
                 case REMINDER:
                     int reminderChoice = Integer.parseInt(input);

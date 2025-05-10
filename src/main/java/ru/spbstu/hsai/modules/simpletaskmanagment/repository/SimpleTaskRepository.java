@@ -30,6 +30,12 @@ public interface SimpleTaskRepository extends ReactiveMongoRepository<SimpleTask
     @Query("{ 'userId': ?0, 'deadline': ?1, 'isCompleted': false }")
     Flux<SimpleTask> findTasksByCustomDate(String userId, LocalDate date);
 
+    @Query("{ 'deadline': { $gte: ?0, $lte: ?1 }, 'isCompleted': false }")
+    Flux<SimpleTask> findOverdueTasks(LocalDate startDate, LocalDate endDate);
+
+    // Для уведомлений (задачи в диапазоне 10 дней)
+    @Query("{ 'deadline': { $gte: ?0, $lte: ?1 }, 'isCompleted': false }")
+    Flux<SimpleTask> findTasksForTenDays(LocalDate startDate, LocalDate endDate);
     // Для /deletetask
     @DeleteQuery("{ '_id': ?0, 'userId': ?1 }")
     Mono<Long> deleteByIdAndUserId(String id, String userId);

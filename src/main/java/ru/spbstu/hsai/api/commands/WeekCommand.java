@@ -5,7 +5,11 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
+import ru.spbstu.hsai.api.commands.utils.FormattedSimpleTask;
+import ru.spbstu.hsai.api.commands.utils.StringSplitter;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
@@ -16,6 +20,8 @@ import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
@@ -50,14 +56,16 @@ public class WeekCommand implements TelegramCommand {
 
         userService.findByTelegramId(tgUser.getId())
                 .flatMap(user -> {
-                    Mono<List<SimpleTask>> simpleTasks = taskService.getWeekTasks(user.getId()).collectList();
-                    Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getWeekTasks(user.getId()).collectList();
-
-                    return Mono.zip(simpleTasks, repeatingTasks);
+                    ZoneId zoneId = ZoneId.of(user.getTimezone()); // поле ZoneId должно быть в User
+                    Mono<List<SimpleTask>> simpleTasks = taskService.getWeekTasks(user.getId(), zoneId).collectList();
+                    Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService.getWeekTasks(user.getId(), zoneId).collectList();
+                    Mono<String> timezone = Mono.just(user.getTimezone());
+                    return Mono.zip(simpleTasks, repeatingTasks, timezone);
                 })
                 .subscribe(tuple -> {
                     List<SimpleTask> simpleTasks = tuple.getT1();
                     List<RepeatingTask> repeatingTasks = tuple.getT2();
+                    String timezone = tuple.getT3();
 
                     if (simpleTasks.isEmpty() && repeatingTasks.isEmpty()) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
@@ -82,8 +90,10 @@ public class WeekCommand implements TelegramCommand {
                         simpleTasks.sort(Comparator.comparing(SimpleTask::getDeadline));
                         int counter = 1;
                         for (SimpleTask task : simpleTasks) {
+                            FormattedSimpleTask ft = new FormattedSimpleTask(task);
                             sb.append(counter++).append(". ")
-                                    .append(task.toString()).append("\n\n");
+                                    .append(ft.format(ZoneId.of(timezone)))
+                                    .append("\n\n");
                         }
                     }
 
@@ -95,17 +105,32 @@ public class WeekCommand implements TelegramCommand {
                         sb.append("🔁 Периодические задачи:\n\n");
                         repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                         int counter = 1;
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
                         for (RepeatingTask task : repeatingTasks) {
+                            FormattedRepeatingTask ft = new FormattedRepeatingTask(task);
                             sb.append(counter++).append(". ")
-                                    .append(task.toString()).append("\n\n");
+                                    .append(ft.format(ZoneId.of(timezone)))
+                                    .append("\n\n");
                         }
                     }
 
                     sb.append("\nЕсли хотите вернуться к списку команд, используйте /help");
 
-                    SendMessage messageToSend = new SendMessage(chatId.toString(), sb.toString());
-                    messageToSend.enableHtml(true);
-                    sender.sendAsync(messageToSend);
+                    // Разбиваем на чанки по 4096 символов
+                    List<String> parts = StringSplitter.splitToChunks(sb.toString(), 4000);
+
+                    Flux.fromIterable(parts)
+                            .concatMap(part -> {
+                                SendMessage msg = SendMessage.builder()
+                                        .chatId(chatId.toString())
+                                        .text(part)
+                                        .build();
+                                msg.enableHtml(true);
+                                return sender.sendReactive(msg);
+                            })
+                            .subscribe();
+
                 }, error -> {
                     sender.sendAsync(new SendMessage(chatId.toString(),
                             "❌ Ошибка при получении задач: " + error.getMessage()));

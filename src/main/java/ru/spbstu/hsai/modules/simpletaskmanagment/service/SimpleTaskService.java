@@ -5,8 +5,7 @@ import reactor.core.publisher.Mono;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 import ru.spbstu.hsai.modules.simpletaskmanagment.repository.SimpleTaskRepository;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
+import java.time.*;
 
 
 @Service
@@ -41,15 +40,21 @@ public class SimpleTaskService {
     }
 
     // Задачи на сегодня
-    public Flux<SimpleTask> getTodayTasks(String userId) {
-        return taskRepository.findTasksByDate(userId, LocalDate.now());
+    public Flux<SimpleTask> getTodayTasks(String userId, ZoneId userZone) {
+        ZonedDateTime zonedStart = LocalDate.now(userZone).atStartOfDay(userZone);
+        // Приводим к московскому времени (если база хранит даты в этом виде)
+        LocalDateTime today = zonedStart.toLocalDateTime();
+        return taskRepository.findTasksByDate(userId, today.toLocalDate());
     }
 
 
     // Задачи на неделю
-    public Flux<SimpleTask> getWeekTasks(String userId) {
-        LocalDate start = LocalDate.now().with(DayOfWeek.MONDAY);
+    public Flux<SimpleTask> getWeekTasks(String userId, ZoneId userZone) {
+        // Начало недели — понедельник для указанного часового пояса
+        LocalDate start = LocalDate.now(userZone).with(DayOfWeek.MONDAY);
+        // Конец недели — воскресенье (плюс 6 дней)
         LocalDate end = start.plusDays(6);
+        // Получаем задачи на неделю с учетом часового пояса
         return taskRepository.findTasksForWeek(userId, start, end);
     }
 
@@ -128,5 +133,22 @@ public class SimpleTaskService {
                     return taskRepository.save(task);
                 });
     }
+    // Задачи для просроченных дедлайнов
+    public Flux<SimpleTask> getOverdueTasks() {
+        LocalDate start = LocalDate.now().minusDays(1);
+        LocalDate end = LocalDate.now();
+        return taskRepository.findOverdueTasks(start, end);
+    }
+
+    // Задачи для напоминаний
+    public Flux<SimpleTask> getTasksForTenDays() {
+        LocalDate start = LocalDate.now();
+        LocalDate end = start.plusDays(10);
+        return taskRepository.findTasksForTenDays(start, end);
+    }
+
+
+
+
 
 }

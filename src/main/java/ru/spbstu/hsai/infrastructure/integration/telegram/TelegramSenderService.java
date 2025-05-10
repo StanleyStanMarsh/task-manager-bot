@@ -5,6 +5,8 @@ import org.telegram.telegrambots.bots.DefaultAbsSender;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import reactor.core.publisher.Mono;
+
 import java.util.concurrent.CompletableFuture;
 
 @Component
@@ -30,5 +32,8 @@ public class TelegramSenderService {
                 throw new RuntimeException("Failed to send message", e);
             }
         });
+    }
+    public Mono<Message> sendReactive(SendMessage message) {
+        return Mono.fromFuture(sendAsync(message));
     }
 }

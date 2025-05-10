@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
 import ru.spbstu.hsai.api.commands.utils.TaskValidation;
 import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationContext;
 import ru.spbstu.hsai.api.context.RepeatingTaskCreation.RepeatingTaskCreationState;
@@ -15,7 +16,11 @@ import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.service.RepeatingTaskService;
 import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Component
 public class NewRepeatingTaskCommand implements TelegramCommand{
@@ -126,18 +131,40 @@ public class NewRepeatingTaskCommand implements TelegramCommand{
                     break;
 
                 case START_DATE:
-                    LocalDateTime startdatetime = TaskValidation.parseDateTime(input);
-                    if (startdatetime == null || startdatetime.isBefore(LocalDateTime.now())) {
+                    LocalDateTime userInputDateTime = TaskValidation.parseDateTime(input);
+                    if (userInputDateTime == null) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
-                                        "не ранее текущего момента.\n" +
+                                "❌ Укажите дату и время в формате дд.мм.гггг чч:мм.\n" +
                                         "Повторите ввод."));
                         return;
                     }
 
-                    state.setStartDateTime(startdatetime);
-                    completeTaskCreation(chatId, state);
-                    break;
+                    userService.findByTelegramId(chatId).subscribe(user -> {
+                        ZoneId userZone = ZoneId.of(user.getTimezone());
+                        LocalDateTime currentUserTime = LocalDateTime.now(userZone);
+
+                        ZonedDateTime userZonedDateTime = userInputDateTime.atZone(userZone);
+                        ZonedDateTime moscowZonedDateTime = userZonedDateTime.withZoneSameInstant(ZoneId.of("Europe/Moscow"));
+                        LocalDateTime moscowTime = moscowZonedDateTime.toLocalDateTime();
+
+                        if (userInputDateTime.isBefore(currentUserTime)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
+                                            "не ранее текущего момента.\n" +
+                                            "Повторите ввод.\n" +
+                                            "Текущее время по вашему часовому поясу: " + currentUserTime.format(DateTimeFormatter.ofPattern("HH:mm"))));
+                            return;
+                        }
+
+                        state.setStartDateTime(moscowTime);
+                        creationContext.updateState(chatId, state);
+                        completeTaskCreation(chatId, state, userZone);
+                    }, error -> {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Не удалось получить ваш часовой пояс. Повторите позже."));
+                    });
+                    return;
+
             }
             creationContext.updateState(chatId, state);
         } catch (NumberFormatException e) {
@@ -169,7 +196,7 @@ public class NewRepeatingTaskCommand implements TelegramCommand{
                 "🗓️ Укажите дату и время начала задачи (в формате дд.мм.гггг чч:мм) "));
     }
 
-    private void completeTaskCreation(Long chatId, RepeatingTaskCreationState state) {
+    private void completeTaskCreation(Long chatId, RepeatingTaskCreationState state, ZoneId userZoneId) {
         taskService.createTask(
                 state.getUserId(),
                 state.getDescription(),
@@ -178,8 +205,13 @@ public class NewRepeatingTaskCommand implements TelegramCommand{
                 state.getStartDateTime()
         ).subscribe(
                 task -> {
-                    String successMessage = "✅Задача создана!\n" + task.toString() +
-                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";
+//                    String successMessage = "✅Задача создана!\n" + task.toString() +
+//                            "\n\nЕсли хотите вернуться к списку команд, используйте /help";
+                    // выводим корректный пояс
+                    FormattedRepeatingTask ft = new FormattedRepeatingTask(task);
+
+                    String successMessage = ft.format(userZoneId);
+
                     SendMessage response = new SendMessage(chatId.toString(), successMessage);
                     response.enableHtml(true);
                     sender.sendAsync(response);

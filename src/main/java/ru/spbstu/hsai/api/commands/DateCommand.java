@@ -5,7 +5,11 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
+import ru.spbstu.hsai.api.commands.utils.FormattedSimpleTask;
+import ru.spbstu.hsai.api.commands.utils.StringSplitter;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
@@ -15,6 +19,8 @@ import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 import ru.spbstu.hsai.modules.simpletaskmanagment.model.SimpleTask;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
@@ -62,24 +68,28 @@ public class DateCommand implements TelegramCommand{
         try {
             LocalDate date = LocalDate.parse(dateString, dateFormatter);
 
-            if (date.isBefore(LocalDate.now())) {
-                sender.sendAsync(new SendMessage(chatId.toString(),
-                        "❌ Нельзя посмотреть задачи за прошедшие даты. Укажите текущую или будущую дату."));
-                return;
-            }
-
             userService.findByTelegramId(tgUser.getId())
                     .flatMap(user -> {
+                        ZoneId zoneId = ZoneId.of(user.getTimezone()); // <-- получаем часовой пояс
+                        LocalDate todayInZone = LocalDate.now(zoneId);
+
+                        if (date.isBefore(todayInZone)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Нельзя посмотреть задачи за прошедшие даты. Укажите текущую или будущую дату."));
+                            return Mono.empty();
+                        }
                         Mono<List<SimpleTask>> simpleTasks = taskService
                                 .getTasksByDate(user.getId(), date).collectList();
                         Mono<List<RepeatingTask>> repeatingTasks = repeatingTaskService
-                                .getTasksByDate(user.getId(), date).collectList();
+                                .getTasksByDate(user.getId(), date, zoneId).collectList();
+                        Mono<String> timezone = Mono.just(user.getTimezone());
 
-                        return Mono.zip(simpleTasks, repeatingTasks);
+                        return Mono.zip(simpleTasks, repeatingTasks, timezone);
                     })
                     .subscribe(tuple -> {
                         List<SimpleTask> simpleTasks = tuple.getT1();
                         List<RepeatingTask> repeatingTasks = tuple.getT2();
+                        String timezone = tuple.getT3();
 
                         String formattedDate = date.format(dateFormatter);
 
@@ -97,8 +107,10 @@ public class DateCommand implements TelegramCommand{
                             sb.append("📋 Ваши задачи на " + formattedDate + ":\n\n");
                             int counter = 1;
                             for (SimpleTask task : simpleTasks) {
+                                FormattedSimpleTask ft = new FormattedSimpleTask(task);
                                 sb.append(counter++).append(". ")
-                                        .append(task.toString()).append("\n\n");
+                                        .append(ft.format(ZoneId.of(timezone)))
+                                        .append("\n\n");
                             }
                         }
 
@@ -110,17 +122,32 @@ public class DateCommand implements TelegramCommand{
                             sb.append("🔁 Периодические задачи:\n\n");
                             repeatingTasks.sort(Comparator.comparing(RepeatingTask::getNextExecution));
                             int counter = 1;
+                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
                             for (RepeatingTask task : repeatingTasks) {
+                                FormattedRepeatingTask ft = new FormattedRepeatingTask(task);
                                 sb.append(counter++).append(". ")
-                                        .append(task.toString()).append("\n\n");
+                                        .append(ft.format(ZoneId.of(timezone)))
+                                        .append("\n\n");
                             }
+
                         }
 
                         sb.append("\nЕсли хотите вернуться к списку команд, используйте /help");
 
-                        SendMessage messageToSend = new SendMessage(chatId.toString(), sb.toString());
-                        messageToSend.enableHtml(true);
-                        sender.sendAsync(messageToSend);
+                        // Разбиваем на чанки по 4096 символов
+                        List<String> parts = StringSplitter.splitToChunks(sb.toString(), 4000);
+
+                        Flux.fromIterable(parts)
+                                .concatMap(part -> {
+                                    SendMessage msg = SendMessage.builder()
+                                            .chatId(chatId.toString())
+                                            .text(part)
+                                            .build();
+                                    msg.enableHtml(true);
+                                    return sender.sendReactive(msg);
+                                })
+                                .subscribe();
                     }, error -> {
                         sender.sendAsync(new SendMessage(chatId.toString(),
                                 "❌ Ошибка при получении задач: " + error.getMessage()));

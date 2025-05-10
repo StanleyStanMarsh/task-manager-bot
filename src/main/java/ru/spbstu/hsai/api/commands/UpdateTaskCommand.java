@@ -10,6 +10,7 @@ import ru.spbstu.hsai.api.commands.utils.TaskValidation;
 import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateContext;
 import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateState;
 import ru.spbstu.hsai.api.context.repeatingTaskUpdate.RepeatingTaskUpdateStep;
+import ru.spbstu.hsai.api.context.simpleTaskCreation.SimpleTaskCreationStep;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateContext;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateState;
 import ru.spbstu.hsai.api.context.simpleTaskUpdate.SimpleTaskUpdateStep;
@@ -23,6 +24,9 @@ import ru.spbstu.hsai.modules.usermanagement.service.UserService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Component
 public class UpdateTaskCommand implements TelegramCommand {
@@ -207,15 +211,31 @@ public class UpdateTaskCommand implements TelegramCommand {
 
                 case NEW_DEADLINE:
                     LocalDate deadline = TaskValidation.parseDate(input);
-                    if (deadline == null || deadline.isBefore(LocalDate.now())) {
+                    if (deadline == null) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Укажите дедлайн задачи в формате дд.мм.гггг не ранее текущей даты. " +
-                                        "Повторите ввод."));
+                                "❌ Укажите дедлайн в формате дд.мм.гггг.\nПовторите ввод."));
                         return;
                     }
-                    state.setDeadline(deadline);
-                    completeTaskUpdate(chatId, state, false);
-                    break;
+
+                    userService.findByTelegramId(chatId).subscribe(user -> {
+                        ZoneId userZone = ZoneId.of(user.getTimezone());
+                        LocalDate currentDate = LocalDate.now(userZone);
+
+                        if (deadline.isBefore(currentDate)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Указанный дедлайн уже прошёл. Сегодня у вас: " +
+                                            currentDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) +
+                                            ". Повторите ввод."));
+                            return;
+                        }
+                        state.setDeadline(deadline);
+                        completeTaskUpdate(chatId, state, false);
+
+                    }, error -> {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Не удалось определить ваш часовой пояс. Повторите позже."));
+                    });
+                    return;
 
                 case NEW_REMINDER:
                     int reminderChoice = Integer.parseInt(input);
@@ -390,18 +410,38 @@ public class UpdateTaskCommand implements TelegramCommand {
                     break;
 
                 case NEW_START_DATE:
-                    LocalDateTime startdatetime = TaskValidation.parseDateTime(input);
-                    if (startdatetime == null || startdatetime.isBefore(LocalDateTime.now())) {
+                    LocalDateTime userInputDateTime = TaskValidation.parseDateTime(input);
+                    if (userInputDateTime == null) {
                         sender.sendAsync(new SendMessage(chatId.toString(),
-                                "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
-                                        "не ранее текущего момента.\n" +
+                                "❌ Укажите дату и время в формате дд.мм.гггг чч:мм.\n" +
                                         "Повторите ввод."));
                         return;
                     }
 
-                    state.setStartDateTime(startdatetime);
-                    completeRepeatingTaskUpdate(chatId, state);
-                    break;
+                    userService.findByTelegramId(chatId).subscribe(user -> {
+                        ZoneId userZone = ZoneId.of(user.getTimezone());
+                        LocalDateTime currentUserTime = LocalDateTime.now(userZone);
+
+                        ZonedDateTime userZonedDateTime = userInputDateTime.atZone(userZone);
+                        ZonedDateTime moscowZonedDateTime = userZonedDateTime.withZoneSameInstant(ZoneId.of("Europe/Moscow"));
+                        LocalDateTime moscowTime = moscowZonedDateTime.toLocalDateTime();
+
+                        if (userInputDateTime.isBefore(currentUserTime)) {
+                            sender.sendAsync(new SendMessage(chatId.toString(),
+                                    "❌ Укажите корректную дату и время в формате дд.мм.гггг чч:мм, " +
+                                            "не ранее текущего момента.\n" +
+                                            "Повторите ввод.\n" +
+                                            "Текущее время по вашему часовому поясу: " + currentUserTime.format(DateTimeFormatter.ofPattern("HH:mm"))));
+                            return;
+                        }
+
+                        state.setStartDateTime(moscowTime);
+                        completeRepeatingTaskUpdate(chatId, state);
+                    }, error -> {
+                        sender.sendAsync(new SendMessage(chatId.toString(),
+                                "❌ Не удалось получить ваш часовой пояс. Повторите позже."));
+                    });
+                    return;
             }
             repeatingTaskUpdateContext.updateState(chatId, state);
         } catch (NumberFormatException e) {
