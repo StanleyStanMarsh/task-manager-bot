@@ -34,6 +34,7 @@ public class SecurityConfig {
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
         return http
                 .authorizeExchange(exchanges -> exchanges
+                        .pathMatchers("/healtcheck").permitAll()
                         .pathMatchers("/users/{telegramId}/demote").hasAuthority("SUPER_ADMIN")
                         .pathMatchers("/users/{telegramId}/promote", "/self_demote", "/users").hasAnyAuthority("ADMIN", "SUPER_ADMIN")
                         .anyExchange().permitAll()
