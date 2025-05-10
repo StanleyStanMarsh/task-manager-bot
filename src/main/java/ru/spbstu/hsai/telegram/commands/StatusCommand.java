@@ -36,7 +36,7 @@ public class StatusCommand implements TelegramCommand {
         this.userService = userService;
         this.taskService = taskService;
         this.repeatingTaskService = repeatingTaskService;
-        this.mongoTemplate = mongoTemplate; //todo - пока так, надо реализовать проверку
+        this.mongoTemplate = mongoTemplate;
     }
 
     @Override
