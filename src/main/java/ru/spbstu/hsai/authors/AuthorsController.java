@@ -7,7 +7,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.authors.controller.BaseResponse;
+import ru.spbstu.hsai.authors.dto.BaseResponse;
+import ru.spbstu.hsai.authors.service.AuthorsService;
 
 import java.time.Instant;
 

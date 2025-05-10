@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.api.TelegramNotifySender;
+import ru.spbstu.hsai.telegram.TelegramNotifySender;
 import ru.spbstu.hsai.notification.service.NotificationService;
 import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
 import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTaskInterface;

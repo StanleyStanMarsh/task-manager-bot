@@ -9,7 +9,7 @@ import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.reactive.config.WebFluxConfigurer;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
-import ru.spbstu.hsai.infrastructure.BotProperties;
+import ru.spbstu.hsai.telegram.BotProperties;
 import ru.spbstu.hsai.infrastructure.ServerProperties;
 import ru.spbstu.hsai.authors.AuthorsController;
 import ru.spbstu.hsai.check.HelloHandler;

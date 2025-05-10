@@ -6,9 +6,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import ru.spbstu.hsai.config.MongoConfig;
 import ru.spbstu.hsai.config.SecurityConfig;
 import ru.spbstu.hsai.config.WebConfig;
-import ru.spbstu.hsai.infrastructure.BotStarter;
+import ru.spbstu.hsai.telegram.BotStarter;
 import ru.spbstu.hsai.infrastructure.ServerStarter;
-import ru.spbstu.hsai.config.SchedulerConfig;
+import ru.spbstu.hsai.notification.SchedulerConfig;
 
 import java.util.Arrays;
 import java.util.concurrent.*;

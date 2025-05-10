@@ -3,6 +3,8 @@ package ru.spbstu.hsai.simpletaskmanagment;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -19,6 +21,8 @@ public interface SimpleTaskInterface {
     Flux<SimpleTask> getTodayTasks(String userId, ZoneId userZone);
     Flux<SimpleTask> getWeekTasks(String userId, ZoneId userZone);
     Mono<Boolean> taskExistsAndBelongsToUser(String taskId, String userId);
+    Flux<SimpleTask> aggregateTasksForReminder(Instant nowUtc, String reminderType, Duration reminderOffset, int targetHour);
+    Flux<SimpleTask> aggregateTasksForOverdueReminder(Instant nowUtc, Duration overdueOffset, int targetHour);
 
     Mono<SimpleTask> findTaskByIdAndUser(String taskId, String userId);
 

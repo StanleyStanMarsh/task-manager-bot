@@ -10,7 +10,7 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
-import ru.spbstu.hsai.usermanagement.controller.UsersListResponse;
+import ru.spbstu.hsai.usermanagement.dto.UsersListResponse;
 import ru.spbstu.hsai.usermanagement.dto.FormattedUser;
 import ru.spbstu.hsai.usermanagement.dto.PromoteRequest;
 import ru.spbstu.hsai.usermanagement.exceptions.*;

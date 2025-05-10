@@ -1,4 +1,8 @@
 package ru.spbstu.hsai.simpletaskmanagment.service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.*;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -7,10 +11,22 @@ import ru.spbstu.hsai.simpletaskmanagment.SimpleTaskInterface;
 import ru.spbstu.hsai.simpletaskmanagment.repository.SimpleTaskRepository;
 
 import java.time.*;
+import java.util.Date;
+import java.util.List;
 
 
 @Service
 public class SimpleTaskService implements SimpleTaskInterface {
+    private static final List<String> SUPPORTED_ZONES = List.of(
+            "Europe/Kaliningrad", "Europe/Moscow", "Europe/Samara",
+            "Asia/Yekaterinburg", "Asia/Omsk", "Asia/Krasnoyarsk",
+            "Asia/Irkutsk", "Asia/Yakutsk", "Asia/Vladivostok",
+            "Asia/Magadan", "Asia/Kamchatka"
+    );
+
+    @Autowired
+    private ReactiveMongoTemplate mongoTemplate;
+
     private final SimpleTaskRepository taskRepository;
 
     public SimpleTaskService(SimpleTaskRepository taskRepository) {
@@ -148,8 +164,144 @@ public class SimpleTaskService implements SimpleTaskInterface {
         return taskRepository.findTasksForTenDays(start, end);
     }
 
+    public Flux<SimpleTask> aggregateTasksForReminder(Instant nowUtc, String reminderType, Duration reminderOffset, int targetHour) {
+        return Flux.fromIterable(SUPPORTED_ZONES)
+                .filter(zone -> isTargetTime(nowUtc, targetHour, zone))
+                .flatMap(zone -> {
+                    Aggregation aggregation = Aggregation.newAggregation(
+                            createAggregationForZone(nowUtc, reminderType, reminderOffset, targetHour, zone)
+                    );
+                    return mongoTemplate.aggregate(aggregation, "simpletasks", SimpleTask.class);
+                });
+    }
+
+    public Flux<SimpleTask> aggregateTasksForOverdueReminder(Instant nowUtc, Duration overdueOffset, int targetHour) {
+        return Flux.fromIterable(SUPPORTED_ZONES)
+                .filter(zone -> isTargetTime(nowUtc, targetHour, zone))
+                .flatMap(zone -> {
+                    Aggregation aggregation = Aggregation.newAggregation(
+                            createAggregationForOverdueZone(nowUtc, overdueOffset, targetHour, zone)
+                    );
+                    return mongoTemplate.aggregate(aggregation, "simpletasks", SimpleTask.class);
+                });
+    }
+
+    private boolean isTargetTime(Instant nowUtc, int targetHour, String zone) {
+        ZonedDateTime nowZoned = nowUtc.atZone(ZoneId.of(zone));
+        return nowZoned.getHour() == targetHour &&
+                nowZoned.getMinute() == 0 &&
+                nowZoned.getSecond() == 0;
+    }
+
+    private AggregationOperation[] createAggregationForZone(Instant nowUtc, String reminderType, Duration reminderOffset, int targetHour, String zone) {
+        ZoneId zoneId = ZoneId.of(zone);
+        ZonedDateTime nowZoned = nowUtc.atZone(zoneId);
+
+        // Проверяем, соответствует ли текущее время целевому часу (23:00 или 00:00) (поправить, чтобы лог был нормальным)
+        if (nowZoned.getHour() != targetHour || nowZoned.getMinute() != 0 || nowZoned.getSecond() != 0) {
+            return new AggregationOperation[]{};
+        }
+
+        // Вычисляем дедлайн, который соответствует напоминанию
+        ZonedDateTime reminderTime = nowZoned.withHour(targetHour).withMinute(0).withSecond(0).withNano(0);
+        ZonedDateTime deadlineTime = reminderTime.plus(reminderOffset);
+
+        // Устанавливаем московское время (Europe/Moscow) и время 21:00
+        ZonedDateTime deadlineMoscowTime = deadlineTime.toLocalDate()
+                .atTime(0, 0)
+                .atZone(ZoneId.of("Europe/Moscow"));
+
+        Instant deadlineStart = deadlineMoscowTime.toInstant();
+        Instant deadlineEnd = deadlineMoscowTime.plus(Duration.ofMinutes(1)).toInstant();
+
+        MatchOperation matchTasks = Aggregation.match(
+                Criteria.where("deadline")
+                        .gte(Date.from(deadlineStart))
+                        .lt(Date.from(deadlineEnd))
+                        .and("reminder").is(reminderType)
+        );
 
 
 
+        // Шаг 1.5: Подтягивание данных пользователя
+        ProjectionOperation project = Aggregation.project("userId", "description", "deadline", "reminder", "complexity", "isCompleted")
+                .and(ConvertOperators.ToObjectId.toObjectId("$userId"))
+                .as("userIdObjectId");
 
+        // Шаг 2: Создаём LookupOperation
+        LookupOperation lookupUser = LookupOperation.newLookup()
+                .from("users")
+                .localField("userIdObjectId")
+                .foreignField("_id")
+                .as("user");
+
+        UnwindOperation unwindUser = Aggregation.unwind("user");
+
+
+        // Этап 3: Фильтрация по часовому поясу пользователя
+        MatchOperation matchTimezone = Aggregation.match(
+                Criteria.where("user.timezone").is(zone)
+        );
+
+        return new AggregationOperation[]{
+                matchTasks,
+                project,
+                lookupUser,
+                unwindUser,
+                matchTimezone
+        };
+    }
+
+    private AggregationOperation[] createAggregationForOverdueZone(Instant nowUtc, Duration overdueOffset, int targetHour, String zone) {
+        ZoneId zoneId = ZoneId.of(zone);
+        ZonedDateTime nowZoned = nowUtc.atZone(zoneId);
+
+        // Проверяем, соответствует ли текущее время целевому часу (00:00), тут тоже вернутся назад, чуть поправить
+        if (nowZoned.getHour() != targetHour || nowZoned.getMinute() != 0 || nowZoned.getSecond() != 0) {
+            return new AggregationOperation[]{};
+        }
+
+        // Вычисляем дату дедлайна (предыдущий день)
+        ZonedDateTime reminderTime = nowZoned.withHour(targetHour).withMinute(0).withSecond(0).withNano(0);
+        ZonedDateTime overdueDate = reminderTime.minus(overdueOffset);
+
+        ZonedDateTime overdueDateMoscow = overdueDate.toLocalDate()
+                .atTime(0, 0)
+                .atZone(ZoneId.of("Europe/Moscow"));
+
+        Instant overdueLikeDB = overdueDateMoscow.toInstant();
+
+        MatchOperation matchOverdueTasks = Aggregation.match(
+                Criteria.where("deadline").is(overdueLikeDB)
+                        .and("isCompleted").is(false)
+        );
+
+        // Этап 2: Подтягивание данных пользователя
+        ProjectionOperation project = Aggregation.project("userId", "description", "deadline", "reminder", "complexity", "isCompleted")
+                .and(ConvertOperators.ToObjectId.toObjectId("$userId"))
+                .as("userIdObjectId");
+
+        // Этап 3: Создаём LookupOperation
+        LookupOperation lookupUser = LookupOperation.newLookup()
+                .from("users")
+                .localField("userIdObjectId")
+                .foreignField("_id")
+                .as("user");
+
+        // Этап 4: Разворачиваем массив user
+        UnwindOperation unwindUser = Aggregation.unwind("user");
+
+        // Этап 5: Фильтрация по часовому поясу пользователя
+        MatchOperation matchTimezone = Aggregation.match(
+                Criteria.where("user.timezone").is(zone)
+        );
+
+        return new AggregationOperation[]{
+                matchOverdueTasks,
+                project,
+                lookupUser,
+                unwindUser,
+                matchTimezone
+        };
+    }
 }
