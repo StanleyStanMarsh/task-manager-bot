@@ -17,6 +17,7 @@ public class TelegramNotifySender {
                 .chatId(telegramId)
                 .text(text)
                 .build();
+        message.enableHtml(true);
 
         return Mono.fromCompletionStage(sender.sendAsync(message)).then();
     }

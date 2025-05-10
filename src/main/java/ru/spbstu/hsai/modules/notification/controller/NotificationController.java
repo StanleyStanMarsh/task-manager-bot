@@ -97,7 +97,7 @@ public class NotificationController {
                             String time = nextExecZoned.toLocalTime()
                                     .format(DateTimeFormatter.ofPattern("HH:mm"));
                             String msg = "🔄 Повторяющаяся задача:" +
-                                    "\n🆔 ID: " + rt.getId() +
+                                    "\n🆔 ID: <code>" + rt.getId() + "</code>" +
                                     "\n📌 Описание: " + rt.getDescription() +
                                     "\n⏰ Выполнение: " + time;
 
@@ -127,12 +127,12 @@ public class NotificationController {
         LocalDate deadline = task.getDeadline();
         if (isOverdue) {
             return "⚡️ Дедлайн задачи истек!" +
-                    "\n🆔 ID: " + task.getId() +
+                    "\n🆔 ID: <code>" + task.getId() + "</code>" +
                     "\n📌 Описание: " + task.getDescription() +
                     "\n Не забудьте отметить задачу завершенной или обновить дедлайн при необходимости.";
         } else {
             return "🔔 Напоминание!" +
-                    "\n🆔 ID: " + task.getId() +
+                    "\n🆔 ID: <code>" + task.getId() + "</code>" +
                     "\n📌 Описание: " + task.getDescription() +
                     "\n❗️ Дедлайн: " + deadline.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
         }

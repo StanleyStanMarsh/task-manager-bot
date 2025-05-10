@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 import reactor.core.publisher.Mono;
+import ru.spbstu.hsai.api.commands.utils.FormattedRepeatingTask;
 import ru.spbstu.hsai.api.events.UpdateReceivedEvent;
 import ru.spbstu.hsai.infrastructure.integration.telegram.TelegramSenderService;
 import ru.spbstu.hsai.modules.repeatingtaskmanagment.model.RepeatingTask;
@@ -93,20 +94,8 @@ public class TodayCommand implements TelegramCommand{
                         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
                         for (RepeatingTask task : repeatingTasks) {
-                            ZonedDateTime startInUserZone = task.getStartDateTime()
-                                    .atZone(ZoneId.of("Europe/Moscow"))
-                                    .withZoneSameInstant(ZoneId.of(timezone));
-                            ZonedDateTime nextExecutionInUserZone = task.getNextExecution()
-                                    .atZone(ZoneId.of("Europe/Moscow"))
-                                    .withZoneSameInstant(ZoneId.of(timezone)); // теперь используем доступный timezone
-
-                            sb.append(counter++).append(".\n")
-                                    .append("🆔 ID: <code>").append(task.getId()).append("</code>\n")
-                                    .append("📌 Описание: ").append(task.getDescription()).append("\n")
-                                    .append("📊 Сложность: ").append(task.getComplexity()).append("\n")
-                                    .append("🔁 Периодичность: ").append(task.getFrequency().getDisplayName()).append("\n")
-                                    .append("🕒 Начало: ").append(startInUserZone.format(formatter)).append("\n")
-                                    .append("⏳ Следующее выполнение: ").append(nextExecutionInUserZone.format(formatter))
+                            sb.append(counter++).append(". ")
+                                    .append(FormattedRepeatingTask.format(task, ZoneId.of(timezone)))
                                     .append("\n\n");
                         }
                     }
