@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.config.FixedRateTask;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
@@ -14,7 +15,7 @@ import java.util.concurrent.Executors;
 
 @Configuration
 @EnableScheduling
-public class SchedulerConfig implements SchedulingConfigurer {
+public class SchedulerConfig {
     private final SchedulerComponent schedulerComponent;
 
     @Autowired
@@ -27,17 +28,9 @@ public class SchedulerConfig implements SchedulingConfigurer {
         return Executors.newScheduledThreadPool(5);
     }
 
-    @Override
-    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
-        taskRegistrar.setScheduler(taskScheduler());
-
-        long delayUntilNextMinute = Duration.ofMillis(60000 - (System.currentTimeMillis() % 60000)).toMillis();
-
-        //  Планируем запуск единого метода runUnifiedScheduler
-        taskRegistrar.addFixedRateTask(new FixedRateTask(
-                schedulerComponent::runUnifiedScheduler,
-                60000L, // интервал в миллисекундах
-                delayUntilNextMinute
-        ));
+    // Метод будет запускаться каждую минуту в 00 секунд
+    @Scheduled(cron = "0 * * * * *")
+    public void runSchedulerAtStartOfMinute() {
+        schedulerComponent.runUnifiedScheduler();
     }
 }
