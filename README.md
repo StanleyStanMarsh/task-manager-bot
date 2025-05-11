@@ -2,6 +2,12 @@
 
 **Task Management Bot** — Telegram-бот для управления задачами, реализованный на основе Java Spring с использованием реактивного стека и модульной архитектуры.
 
+Ссылка на Docker Hub репозиторий c Docker-образом:  
+[![Docker](https://img.shields.io/docker/pulls/stanleystanmarsh/task_management_bot)](https://hub.docker.com/r/stanleystanmarsh/task_management_bot)
+
+Ссылка на Telegram-бота:  
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Try%20it-blue)](https://t.me/TaskMana9ementBot)
+
 ---
 
 ### Технологический стек
