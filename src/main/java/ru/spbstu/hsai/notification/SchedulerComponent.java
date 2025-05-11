@@ -1,5 +1,7 @@
 package ru.spbstu.hsai.notification;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -14,6 +16,7 @@ import java.time.format.DateTimeFormatter;
 
 @Component
 public class SchedulerComponent {
+    private static final Logger log = LoggerFactory.getLogger(SchedulerComponent.class);
     private final RepeatingTaskInterface repeatingTaskService;
     private final NotificationService notificationService;
     private final NotificationController notificationController;
@@ -43,8 +46,11 @@ public class SchedulerComponent {
                     // Сначала уведомляем
                     return notificationService.checkAndNotify(nowUtc, notificationController)
                             .thenMany(Flux.fromIterable(tasks)
-                                    .flatMap(task -> sendNotification(task.getUserId(), task.getDescription())
-                                            .then(repeatingTaskService.processCompletedTask(task, now))));
+                                    .flatMap(task -> {
+                                        log.info(task.getDescription() + " start at " + task.getStartDateTime() + " next at " + task.getNextExecution());
+                                        return sendNotification(task.getUserId(), task.getDescription())
+                                            .then(repeatingTaskService.processCompletedTask(task, now));
+                                    }));
                 })
                 .subscribe();
     }

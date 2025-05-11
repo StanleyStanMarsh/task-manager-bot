@@ -97,16 +97,16 @@ public class RepeatingTask {
         // Прибавляем нужное количество периодов
         switch (frequency) {
             case HOURLY:
-                this.nextExecution = nextExecution.plusHours(periodsToSkip);
+                this.nextExecution = nextExecution.plusHours(periodsToSkip).truncatedTo(ChronoUnit.MINUTES);
                 break;
             case DAILY:
-                this.nextExecution = nextExecution.plusDays(periodsToSkip);
+                this.nextExecution = nextExecution.plusDays(periodsToSkip).truncatedTo(ChronoUnit.MINUTES);
                 break;
             case WEEKLY:
-                this.nextExecution = nextExecution.plusWeeks(periodsToSkip);
+                this.nextExecution = nextExecution.plusWeeks(periodsToSkip).truncatedTo(ChronoUnit.MINUTES);
                 break;
             case MONTHLY:
-                this.nextExecution = nextExecution.plusMonths(periodsToSkip);
+                this.nextExecution = nextExecution.plusMonths(periodsToSkip).truncatedTo(ChronoUnit.MINUTES);
                 break;
         }
     }
