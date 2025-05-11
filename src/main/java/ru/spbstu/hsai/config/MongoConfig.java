@@ -16,6 +16,10 @@ import org.springframework.data.mongodb.core.SimpleReactiveMongoDatabaseFactory;
 import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRepositories;
 import ru.spbstu.hsai.infrastructure.MongoProperties;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 @ComponentScan(basePackages = "ru.spbstu.hsai")
 @Configuration
 @EnableReactiveMongoRepositories(
@@ -35,16 +39,40 @@ public class MongoConfig {
     public MongoProperties mongoProperties(
             @Value("${mongo.host}") String host,
             @Value("${mongo.port}") int port,
-            @Value("${mongo.database}") String database) {
-        log.info("Mongo settings: {}:{}/{}", host, port, database);
-        return new MongoProperties(host, port, database);
+            @Value("${mongo.database}") String database,
+            @Value("${mongo.username}") String username,
+            @Value("${mongo.password}") String password) {
+
+        log.info("Mongo settings: {}:{}/{} (user: {})", host, port, database, username.isEmpty() ? "none" : username);
+        return new MongoProperties(host, port, database, username, password);
     }
 
     @Bean
     public MongoClient reactiveMongoClient(MongoProperties props) {
-        String uri = String.format("mongodb://%s:%d/%s",
-                props.host(), props.port(), props.database());
+        String uri;
+        if (!props.username().isEmpty() && !props.password().isEmpty()) {
+            uri = String.format("mongodb://%s:%s@%s:%d/%s?authSource=admin",
+                    encodeURIComponent(props.username()),
+                    encodeURIComponent(props.password()),
+                    props.host(),
+                    props.port(),
+                    props.database());
+        } else {
+            uri = String.format("mongodb://%s:%d/%s",
+                    props.host(),
+                    props.port(),
+                    props.database());
+        }
+        log.info("Creating MongoClient with URI: {}", uri.replaceFirst(":([^@]+)@", ":*****@"));
         return MongoClients.create(uri);
+    }
+
+    private String encodeURIComponent(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.toString());
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException("Failed to encode MongoDB credentials", e);
+        }
     }
 
     @Bean

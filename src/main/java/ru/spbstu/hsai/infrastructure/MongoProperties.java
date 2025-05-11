@@ -1,4 +1,4 @@
 package ru.spbstu.hsai.infrastructure;
 
-public record MongoProperties(String host, int port, String database) {
+public record MongoProperties(String host, int port, String database, String username, String password) {
 }

@@ -1,8 +1,7 @@
-package ru.spbstu.hsai.infrastructure.config;
+package ru.spbstu.hsai.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
@@ -13,16 +12,27 @@ import org.springframework.vault.client.VaultEndpoint;
 import org.springframework.vault.core.VaultTemplate;
 import org.springframework.vault.core.env.VaultPropertySource;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 @Configuration
 public class VaultConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(VaultConfiguration.class);
 
-    private final String vaultAddr = System.getenv("VAULT_ADDR");;
+    private final String vaultAddr = System.getenv("VAULT_ADDR");
 
-    private final String vaultToken = System.getenv("VAULT_TOKEN");;
+    private String vaultToken;
+
+    {
+        try {
+            vaultToken = Files.readString(Paths.get(System.getenv("VAULT_TOKEN_FILE"))).trim();
+        } catch (IOException e) {
+            log.error("error in vault", e);
+        }
+    }
 
     @Bean
     public VaultEndpoint vaultEndpoint() {
