@@ -40,7 +40,7 @@
 
 ![Граф зависимостей](diagram.png)
 
-[**Документация Spring Modulith о взаимосвязях между модулями**](docs/index.html).
+[**Документация Spring Modulith о взаимосвязях между модулями**](https://stanleystanmarsh.github.io/task-manager-bot/).
 
 ---
 
