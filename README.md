@@ -40,7 +40,7 @@
 
 ![Граф зависимостей](diagram.png)
 
-[**Документация Spring Modulith о взаимосвязях между модулями**](all-docs.html).
+[**Документация Spring Modulith о взаимосвязях между модулями**](docs/index.html).
 
 ---
 
