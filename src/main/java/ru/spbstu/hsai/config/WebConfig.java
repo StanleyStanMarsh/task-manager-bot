@@ -23,7 +23,7 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 @Configuration
 @EnableWebFlux
 @PropertySource("classpath:application.properties")
-@PropertySource("classpath:telegram.properties")
+//@PropertySource("classpath:telegram.properties")
 public class WebConfig implements WebFluxConfigurer {
 
     @Override

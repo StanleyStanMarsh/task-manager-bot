@@ -21,10 +21,10 @@ public class Main {
 
     public static void main(String[] args) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                ru.spbstu.hsai.infrastructure.config.VaultConfiguration.class,
                 WebConfig.class,
                 MongoConfig.class,
                 SecurityConfig.class,
-                MongoConfig.class,
                 SchedulerConfig.class
         );
 
