@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   app:
-    build: .
+    image: stanleystanmarsh/task_management_bot:0.5
     container_name: java-app
     depends_on:
       mongo:
