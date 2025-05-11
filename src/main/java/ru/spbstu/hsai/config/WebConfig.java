@@ -14,6 +14,7 @@ import ru.spbstu.hsai.infrastructure.ServerProperties;
 import ru.spbstu.hsai.authors.AuthorsController;
 import ru.spbstu.hsai.check.HelloHandler;
 import ru.spbstu.hsai.usermanagement.UserController;
+import ru.spbstu.hsai.modules.check.HealthCheckController;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.*;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
@@ -48,10 +49,12 @@ public class WebConfig implements WebFluxConfigurer {
     @Bean
     public RouterFunction<ServerResponse> routes(
             HelloHandler helloHandler,
+            HealthCheckController healthCheckController,
             UserController userController,
             AuthorsController authorsController
     ) {
         return route(GET("/hello"), helloHandler::hello)
+                .andRoute(GET("/healthcheck"), healthCheckController::healthCheck)
                 .andRoute(PATCH("/users/{telegramId}/promote"), userController::promote)
                 .andRoute(PATCH("/self_demote"), userController::selfDemote)
                 .andRoute(PATCH("/users/{telegramId}/demote"), userController::demote)
