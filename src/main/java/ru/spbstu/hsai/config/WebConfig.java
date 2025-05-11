@@ -14,7 +14,7 @@ import ru.spbstu.hsai.infrastructure.ServerProperties;
 import ru.spbstu.hsai.authors.AuthorsController;
 import ru.spbstu.hsai.check.HelloHandler;
 import ru.spbstu.hsai.usermanagement.UserController;
-import ru.spbstu.hsai.modules.check.HealthCheckController;
+import ru.spbstu.hsai.check.HealthCheckController;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.*;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
