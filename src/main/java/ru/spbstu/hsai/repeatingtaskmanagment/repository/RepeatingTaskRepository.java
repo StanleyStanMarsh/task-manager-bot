@@ -18,7 +18,7 @@ public interface RepeatingTaskRepository extends ReactiveMongoRepository<Repeati
     Flux<RepeatingTask> findTasksByUserId(String userId);
 
     @Query("{ 'nextExecution': { $lte: ?0 } }")
-    Flux<RepeatingTask> findAllTasksToExecute(LocalDateTime now);
+    Flux<RepeatingTask> findAllTasksToExecute(LocalDateTime roundedTime);
 
     // Для поиска существующей задачи
     @Query("{ 'userId': ?0, 'description': ?1, 'complexity': ?2, 'frequency': ?3, 'startDateTime': ?4 }")

@@ -9,6 +9,7 @@ import ru.spbstu.hsai.repeatingtaskmanagment.RepeatingTask;
 import ru.spbstu.hsai.repeatingtaskmanagment.repository.RepeatingTaskRepository;
 
 import java.time.*;
+import java.time.temporal.ChronoUnit;
 
 @Service
 public class RepeatingTaskService implements RepeatingTaskInterface {
@@ -53,7 +54,7 @@ public class RepeatingTaskService implements RepeatingTaskInterface {
 
 
     public Flux<RepeatingTask> getAllTasksToExecute() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
         return taskRepository.findAllTasksToExecute(now);
     }
 
