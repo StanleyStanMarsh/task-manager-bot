@@ -141,8 +141,11 @@ docker-compose up --build
 
 Вывод в логи будет приблизительно следующий:
 
-![Логи 1](screenshot/img.png "Запуск vault-init и mongo")
-![Логи 2](screenshot/img_1.png "Запуск app")
+**Запуск vault-init и mongo**
+![Логи 1](screenshot/img.png)
+
+**Запуск app**
+![Логи 2](screenshot/img_1.png)
 
 Если вы увидели данные логи и все сервисы продолжают работать без ошибок, то уже можно пользоваться ботом.
 
