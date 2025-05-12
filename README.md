@@ -16,7 +16,7 @@
 * **Spring Framework** (без Spring Boot)
 * **Spring WebFlux** - реактивная обработка запросов
 * **Spring Modulith** - модульная архитектура приложения
-* **MongoDB** - документоориентированная база данных
+* **MongoDB** - документоориентированная СУБД
 * **HashiCorp Vault** - управление секретами и конфигурациями
 * **Docker** + **Docker Compose** - контейнеризация и оркестрация сервисов
 * **Telegram Bot API** - взаимодействие с пользователями
@@ -50,107 +50,48 @@
 
 ---
 
-### Развёртывание
+### Сервисы Docker
 
-Для запуска проекта необходимо предварительно установить и настроить HashiCorp Vault, а также использовать `docker-compose` для развёртывания всех компонентов.
+- **vault** – сервис для хранения секретов (пароли, токены).
+- **vault-init** – сервис для инициализации Vault: загружает секреты.
+- **mongo** – сервис с базой данных для приложения и СУБД MongoDB.
+- **app** – сервис с основным Java-приложением (Task Management Bot). Зависит от успешного запуска `mongo`, `vault` и от корректного завершения работы сервиса `vault-init`.
 
-#### 1. Установка HashiCorp Vault
-
-Скачайте Vault с [официального сайта](https://developer.hashicorp.com/vault/downloads). Распакуйте архив, содержащий единственный `vault.exe`, и добавьте путь к нему в системную переменную `PATH`. Проверьте установку командой:
-
-```bash
-vault -v
-```
-
-Если Vault установлен корректно, отобразится его версия.
-
-#### 2. Подготовка окружения
-
-В каталог с `docker-compose.yml` поместите следующие файлы:
-
-* [`upload-to-vault.ps1`](upload-to-vault.ps1) — PowerShell-скрипт для загрузки секретов в контейнер Vault;
-* `vault_root_token.txt` — файл, содержащий root-токен Vault (одна строка).
-
-#### 3. Запуск Vault
-
-Поднимите контейнер Vault:
-
-```bash
-docker compose up -d vault --build
-```
-
-Затем просмотрите логи контейнера и найдите строку с `Root Token:`. Скопируйте токен:
-
-1. Вставьте его в `vault_root_token.txt` (одна строка без лишних символов);
-2. Укажите этот токен в скрипте `upload-to-vault.ps1` в строке:
-
-```powershell
-$env:VAULT_TOKEN = "<ваш_токен>"
-```
-
-#### 4. Загрузка секретов в Vault
-
-В PowerShell, при необходимости, разрешите выполнение скриптов:
-
-```powershell
-Set-ExecutionPolicy RemoteSigned –Force
-```
-
-Затем выполните:
-
-```powershell
-.\upload-to-vault.ps1
-```
-
-Если всё прошло успешно, появится сообщение о корректной отправке данных.
-
-#### 5. Запуск приложения
-
-Запустите оставшиеся контейнеры:
-
-```bash
-docker compose up --build
-```
-
-> Если требуется перезапуск без пересборки образов и с сохранением данных в базе, используйте команду без флага `--build`:
-
-```bash
-docker compose up
-```
-
-После корректного запуска всех сервисов Telegram-бот будет готов к использованию.
+_Дополнительно_:
+- **Секреты** – [vault_root_token.txt](vault_root_token.txt) передается в сервис `app`.
+- **Том** – `mongodb_data` сохраняет данные MongoDB между перезапусками.
 
 ---
 
-
 ### Конфигурация
 
-**Переменные окружения и секреты сервиса vault (нужно сконфигурировать [здесь](upload-to-vault.ps1)):**
+Прежде чем запустить проект, необходимо заполнить все данные для приложения.
 
-* `VAULT_ADDR` - URL сервиса Vault
-* `VAULT_TOKEN` - токен доступа к Vault
+> Вам перед запуском понадобится изменить два конфигурационных файла:
+> 1. [vault-init.sh](vault-init.sh) - shell-скрипт для проброса секретов (токенов, логинов, паролей) в сервис vault
+> 2. [vault_root_token.txt](vault_root_token.txt) - файл секрета с Vault токеном, который пробрасывается через docker compose в сервис app
+
+**Переменные окружения и секреты сервиса vault (нужно сконфигурировать в [vault-init.sh](vault-init.sh)):**
+
+* `VAULT_TOKEN` - токен доступа к Vault, записывается переменной окружения во временном контейнере `vault-init`, его можно записать **только после инициализации сервиса vault** (см. [ниже](#2-запуск-vault))
 * `mongo.host` - хост для MongoDB
 * `mongo.port` - порт для MongoDB
 * `mongo.database` - имя базы данных MongoDB
 * `mongo.username` и `mongo.password` - логин и пароль пользователя базы данных
 * `telegram.bot.token` - токен Telegram-бота (можно получить у [BotFather](https://t.me/BotFather))
 * `telegram.bot.username` - имя Telegram-бота
-* `superadmin.telegramId`, `superadmin.username`, `superadmin.firstName`, `superadmin.lastName`, `superadmin.password` - данные для SUPER-ADMIN, который обладает особыми привилегиями
+* `superadmin.telegramId`, `superadmin.username`, `superadmin.firstName`, `superadmin.lastName`, `superadmin.password` - данные для SUPER-ADMIN, который обладает особыми привилегиями при администрировании приложением
 
-О загрузке секретов в Vault написано [в этом разделе](#4-загрузка-секретов-в-vault).
+**Переменные окружения сервиса `mongo` (нужно сконфигурировать в [docker-compose.yml](docker-compose.yml)):**
 
-**Переменные окружения сервиса mongo (нужно сконфигурировать [здесь](docker-compose.yml)):**
+* `MONGO_INITDB_ROOT_USERNAME` и `MONGO_INITDB_ROOT_PASSWORD` - логин и пароль пользователя базы данных (должны совпадать с `mongo.username` и `mongo.password` в [vault-init.sh](vault-init.sh))
 
-* `MONGO_INITDB_ROOT_USERNAME` и `MONGO_INITDB_ROOT_PASSWORD` - логин и пароль пользователя базы данных (должен совпадать с `mongo.username` и `mongo.password` в передаваемых секретах)
+**Переменные окружения и секреты сервиса `app` (нужно сконфигурировать в [docker-compose.yml](docker-compose.yml) и в [vault_root_token.txt](vault_root_token.txt)):**
 
-**Переменные окружения и секреты сервиса app (нужно сконфигурировать [здесь](docker-compose.yml) и [здесь](vault_root_token.txt)):**
+* `VAULT_ADDR` - адрес и порт для доступа к программе Vault в сервисе `vault` (_!изменять не требуется!_)
+* `VAULT_TOKEN_FILE` - путь до файла [vault_root_token.txt](vault_root_token.txt), который экспортируется в качестве секрета в контейнер сервиса `app` (_!изменять не требуется!_)
 
-* `VAULT_ADDR` - адрес и порт для доступа к программе Vault в сервисе vault
-* `VAULT_TOKEN_FILE` - путь до файла [vault_root_token](vault_root_token.txt), который экспортируется в качестве секрета в контейнер сервиса app
-* ```yaml
-    secrets:
-      - vault_root_token
-   ```
+* В [vault_root_token](vault_root_token.txt) необходимо будет записать Vault токен (см. [ниже](#2-запуск-vault))
 
 **Конфигурация секретов docker-compose:**
 
@@ -160,6 +101,50 @@ secrets:
     file: vault_root_token.txt
 
 ```
+
+---
+
+### Развёртывание
+
+#### 1. Подготовка окружения
+
+В каталог с `docker-compose.yml` поместите следующие файлы:
+
+* [vault-init.sh](vault-init.sh)
+* [vault_root_token.txt](vault_root_token.txt)
+
+#### 2. Запуск Vault
+
+Поднимите отдельно контейнер `vault` (можно без параметра `-d`, чтобы логи выводились в терминале):
+
+```shell
+docker compose up -d vault --build
+```
+
+Затем просмотрите логи контейнера `vault` и найдите строку с `Root Token: ...`. Скопируйте токен:
+
+1. Вставьте его в [vault_root_token.txt](vault_root_token.txt) (одна строка без лишних символов);
+2. Укажите этот токен в скрипте [vault-init.sh](vault-init.sh) в строке:
+    ```shell
+    VAULT_TOKEN=replace_this_text_with_token
+    ```
+
+#### 3. Запуск остальных сервисов
+
+После корректно заполненных данных в конфигурационных файлах можно запустить оставшиеся сервисы:
+
+```shell
+docker-compose up --build
+```
+
+Самым первым должен запуститься `vault-init`, который проинициализирует секреты и завершится. После его завершения должен запуститься `mongo`, после загрузки которого запустится и основной сервис `app`.
+
+Вывод в логи будет приблизительно следующий:
+
+![Логи 1](screenshot/img.png "Запуск vault-init и mongo")
+![Логи 2](screenshot/img_1.png "Запуск app")
+
+Если вы увидели данные логи и все сервисы продолжают работать без ошибок, то уже можно пользоваться ботом.
 
 ---
 
