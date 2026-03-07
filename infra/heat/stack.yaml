@@ -7,7 +7,7 @@ parameters:
   image_id:
     type: string
     label: Image
-    default: "ubuntu-22.04"
+    default: "ununtu-22.04"
 
   flavor_id:
     type: string
