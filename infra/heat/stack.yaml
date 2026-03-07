@@ -1,0 +1,89 @@
+heat_template_version: 2015-10-15
+
+description: |
+  инфраструктура для task-management-bot
+
+parameters:
+  image_id:
+    type: string
+    label: Image
+    default: "ubuntu-22.04"
+
+  flavor_id:
+    type: string
+    label: Flavor
+    default: "m1.small"
+
+  key_name:
+    type: string
+    label: SSH Key
+    default: "pluzhnikova"
+
+  existing_subnet_id:
+    type: string
+    label: Existing Subnet ID
+    default: "d80da048-c188-45a5-80e4-55d914fe58ea"
+
+resources:
+  bot_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name: pluzhnikova-sg
+      description: SG for task-management-bot
+      rules:
+        - protocol: tcp
+          port_range_min: 22
+          port_range_max: 22
+          remote_ip_prefix: 0.0.0.0/0
+        - protocol: tcp
+          port_range_min: 8080
+          port_range_max: 8080
+          remote_ip_prefix: 0.0.0.0/0
+
+  mongo_volume:
+    type: OS::Cinder::Volume
+    deletion_policy: Delete
+    properties:
+      name: mongo-vol
+      size: 10
+      description: MongoDB data volume
+
+  bot_server:
+    type: OS::Nova::Server
+    properties:
+      name: pluzhnikova-bot
+      image: { get_param: image_id }
+      flavor: { get_param: flavor_id }
+      key_name: { get_param: key_name }
+      networks:
+        - subnet: { get_param: existing_subnet_id }
+      security_groups:
+        - { get_resource: bot_security_group }
+
+  mongo_attach:
+    type: OS::Cinder::VolumeAttachment
+    properties:
+      instance_uuid: { get_resource: bot_server }
+      volume_id: { get_resource: mongo_volume }
+      mountpoint: /dev/vdb
+
+outputs:
+  server_private_ip:
+    description: "Private IP address"
+    value: { get_attr: [bot_server, first_address] }
+
+  server_name:
+    description: "Server name"
+    value: { get_attr: [bot_server, name] }
+
+  ssh_command:
+    description: "SSH command (via bastion/VPN)"
+    value:
+      str_replace:
+        template: "ssh -i <key> ubuntu@{ip}"
+        params:
+          ip: { get_attr: [bot_server, first_address] }
+
+  console_url:
+    description: "How to access console"
+    value: "OpenStack Dashboard → Compute → Instances → bot-vm → Console"
