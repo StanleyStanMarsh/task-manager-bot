@@ -1,0 +1,81 @@
+---
+- name: Setup Task Management Bot VM
+  hosts: all
+  become: true
+
+  vars:
+    app_dir: /opt/task-bot
+    mongo_mount: /var/lib/mongodb
+
+  tasks:
+    # 1. Ждём cloud-init
+    - name: Wait for cloud-init
+      wait_for:
+        path: /var/lib/cloud/instance/boot-finished
+        timeout: 300
+
+    # 2. Обновление системы
+    - name: Update apt cache
+      apt:
+        update_cache: true
+
+    - name: Install base packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - unzip
+        state: present
+
+    # 3. Docker
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+
+    - name: Start Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add ubuntu to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    # 4. МОНТИРОВАНИЕ Mongo диска (/dev/vdb)
+
+    - name: Check disk filesystem
+      command: blkid -s TYPE -o value /dev/vdb
+      register: mongo_fs
+      failed_when: false
+      changed_when: false
+
+    - name: Format disk if needed
+      filesystem:
+        fstype: ext4
+        dev: /dev/vdb
+      when: mongo_fs.stdout == ""
+
+    - name: Create mount directory
+      file:
+        path: "{{ mongo_mount }}"
+        state: directory
+
+    - name: Mount disk
+      mount:
+        path: "{{ mongo_mount }}"
+        src: /dev/vdb
+        fstype: ext4
+        state: mounted
+
+    # 5. Папка приложения
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
