@@ -46,6 +46,19 @@
         groups: docker
         append: true
 
+    # docker-compose
+    - name: Install docker-compose
+      apt:
+        name: docker-compose
+        state: present
+
+    # Vault CLI
+    - name: Install Vault
+      apt:
+        name: vault
+        state: present
+      ignore_errors: yes
+
     # 4. МОНТИРОВАНИЕ Mongo диска (/dev/vdb)
 
     - name: Check disk filesystem
