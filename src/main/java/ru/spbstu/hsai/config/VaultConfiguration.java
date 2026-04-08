@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 //@Configuration
+/*
 public class VaultConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(VaultConfiguration.class);
@@ -59,5 +60,5 @@ public class VaultConfiguration {
         env.getPropertySources().addFirst(vps);
         return new PropertySourcesPlaceholderConfigurer();
     }
-}
+} */
 
