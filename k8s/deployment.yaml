@@ -17,3 +17,6 @@ spec:
           image: dwarfiksks/task-bot:latest
           ports:
             - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: task-bot-secret

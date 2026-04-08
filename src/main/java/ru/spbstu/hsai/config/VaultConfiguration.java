@@ -17,7 +17,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-@Configuration
+//@Configuration
 public class VaultConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(VaultConfiguration.class);
