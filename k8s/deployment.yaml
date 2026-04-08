@@ -17,6 +17,8 @@ spec:
           image: dwarfiksks/task-bot:latest
           ports:
             - containerPort: 8080
-          envFrom:
-            - secretRef:
-                name: task-bot-secret
+          env:
+            - name: VAULT_ADDR
+              value: "http://vault:8200"
+            - name: VAULT_TOKEN
+              value: "root"
