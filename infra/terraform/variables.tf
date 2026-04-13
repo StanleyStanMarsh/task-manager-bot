@@ -14,6 +14,16 @@ variable "zone" {
   default     = "ru-central1-a"
 }
 
+variable "subnet_id" {
+  type        = string
+  description = "Existing subnet ID (provided by teacher/org)"
+}
+
+variable "security_group_id" {
+  type        = string
+  description = "Existing security group ID (provided by teacher/org)"
+}
+
 variable "vm_name" {
   type        = string
   description = "Compute instance name"
@@ -59,17 +69,5 @@ variable "ssh_username" {
 variable "ssh_public_key" {
   type        = string
   description = "SSH public key text (single line)"
-}
-
-variable "network_cidr" {
-  type        = string
-  description = "VPC network CIDR"
-  default     = "10.10.0.0/16"
-}
-
-variable "subnet_cidr" {
-  type        = string
-  description = "Subnet CIDR"
-  default     = "10.10.0.0/24"
 }
 

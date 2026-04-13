@@ -47,7 +47,9 @@ pipeline {
           string(credentialsId: 'YC_TOKEN', variable: 'YC_TOKEN'),
           string(credentialsId: 'YC_CLOUD_ID', variable: 'YC_CLOUD_ID'),
           string(credentialsId: 'YC_FOLDER_ID', variable: 'YC_FOLDER_ID'),
-          string(credentialsId: 'YC_SSH_PUBLIC_KEY', variable: 'YC_SSH_PUBLIC_KEY')
+          string(credentialsId: 'YC_SSH_PUBLIC_KEY', variable: 'YC_SSH_PUBLIC_KEY'),
+          string(credentialsId: 'YC_SUBNET_ID', variable: 'YC_SUBNET_ID'),
+          string(credentialsId: 'YC_SECURITY_GROUP_ID', variable: 'YC_SECURITY_GROUP_ID')
         ]) {
           sh '''
             set -euo pipefail
@@ -58,7 +60,9 @@ pipeline {
             terraform apply -auto-approve -input=false \
               -var "cloud_id=${YC_CLOUD_ID}" \
               -var "folder_id=${YC_FOLDER_ID}" \
-              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}"
+              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}" \
+              -var "subnet_id=${YC_SUBNET_ID}" \
+              -var "security_group_id=${YC_SECURITY_GROUP_ID}"
           '''
         }
       }

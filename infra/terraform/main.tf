@@ -2,44 +2,6 @@ data "yandex_compute_image" "ubuntu" {
   family = "ubuntu-2204-lts"
 }
 
-resource "yandex_vpc_network" "net" {
-  name = "${var.vm_name}-net"
-}
-
-resource "yandex_vpc_subnet" "subnet" {
-  name           = "${var.vm_name}-subnet"
-  zone           = var.zone
-  network_id     = yandex_vpc_network.net.id
-  v4_cidr_blocks = [var.subnet_cidr]
-}
-
-resource "yandex_vpc_security_group" "sg" {
-  name       = "${var.vm_name}-sg"
-  network_id = yandex_vpc_network.net.id
-
-  ingress {
-    protocol       = "TCP"
-    description    = "SSH"
-    port           = 22
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    protocol       = "TCP"
-    description    = "App HTTP"
-    port           = 8080
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    protocol       = "ANY"
-    description    = "Allow all egress"
-    from_port      = 0
-    to_port        = 65535
-    v4_cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
 resource "yandex_container_registry" "registry" {
   name      = "${var.vm_name}-registry"
   folder_id = var.folder_id
@@ -64,9 +26,9 @@ resource "yandex_compute_instance" "vm" {
   }
 
   network_interface {
-    subnet_id          = yandex_vpc_subnet.subnet.id
+    subnet_id          = var.subnet_id
     nat                = true
-    security_group_ids = [yandex_vpc_security_group.sg.id]
+    security_group_ids = [var.security_group_id]
   }
 
   metadata = {
