@@ -8,12 +8,6 @@ variable "folder_id" {
   description = "Yandex Cloud folder id"
 }
 
-variable "zone" {
-  type        = string
-  description = "Compute zone"
-  default     = "ru-central1-a"
-}
-
 variable "subnet_id" {
   type        = string
   description = "Existing subnet ID (provided by teacher/org)"

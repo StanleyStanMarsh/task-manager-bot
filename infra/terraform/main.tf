@@ -2,6 +2,10 @@ data "yandex_compute_image" "ubuntu" {
   family = "ubuntu-2204-lts"
 }
 
+data "yandex_vpc_subnet" "subnet" {
+  subnet_id = var.subnet_id
+}
+
 resource "yandex_container_registry" "registry" {
   name      = "${var.vm_name}-registry"
   folder_id = var.folder_id
@@ -10,6 +14,7 @@ resource "yandex_container_registry" "registry" {
 resource "yandex_compute_instance" "vm" {
   name        = var.vm_name
   platform_id = var.vm_platform_id
+  zone        = data.yandex_vpc_subnet.subnet.zone
 
   resources {
     cores         = var.vm_cores
