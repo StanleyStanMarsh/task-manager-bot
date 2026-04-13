@@ -11,7 +11,6 @@ pipeline {
     TF_DIR = 'infra/terraform'
     ANSIBLE_DIR = 'infra/ansible'
     APP_DIR = '.'
-    // container name from docker-compose.yml (used for --volumes-from)
     JENKINS_CONTAINER = 'jenkins-lab'
   }
 
@@ -82,8 +81,6 @@ pipeline {
             IMAGE_TAG="${GIT_COMMIT:-manual}"
             APP_IMAGE="cr.yandex/${REGISTRY_ID}/task-manager-bot:${IMAGE_TAG}"
 
-            # Jenkins runs inside a container, so host paths are not available to the Docker daemon.
-            # Build from a tar stream to avoid bind-mount path issues.
             tar -C "${WORKSPACE}" -cf - . | docker build -t "${APP_IMAGE}" -
             echo "${YC_TOKEN}" | docker login --username oauth --password-stdin cr.yandex
             docker push "${APP_IMAGE}"
@@ -101,10 +98,17 @@ pipeline {
           string(credentialsId: 'VAULT_DEV_ROOT_TOKEN_ID', variable: 'VAULT_DEV_ROOT_TOKEN_ID'),
           string(credentialsId: 'MONGO_INITDB_ROOT_USERNAME', variable: 'MONGO_INITDB_ROOT_USERNAME'),
           string(credentialsId: 'MONGO_INITDB_ROOT_PASSWORD', variable: 'MONGO_INITDB_ROOT_PASSWORD'),
+          file(credentialsId: 'VAULT_INIT_SH', variable: 'CRED_VAULT_INIT_SH'),
           sshUserPrivateKey(credentialsId: 'YC_SSH_KEY', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')
         ]) {
           sh '''
             set -euo pipefail
+
+            mkdir -p "${ANSIBLE_DIR}/files"
+            cp "${CRED_VAULT_INIT_SH}" "${ANSIBLE_DIR}/files/vault-init.sh"
+            chmod 0755 "${ANSIBLE_DIR}/files/vault-init.sh"
+            printf '%s\n' "${VAULT_DEV_ROOT_TOKEN_ID}" > "${ANSIBLE_DIR}/files/vault_root_token.txt"
+            chmod 0600 "${ANSIBLE_DIR}/files/vault_root_token.txt"
 
             cd "${TF_DIR}"
             VM_IP="$(terraform output -raw vm_external_ip)"
@@ -130,7 +134,4 @@ pipeline {
       }
     }
   }
-
-  // post actions removed: when checkout fails early, workspace context is missing
 }
-

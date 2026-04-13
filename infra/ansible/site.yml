@@ -56,15 +56,15 @@
         dest: "{{ app_dir }}/docker-compose.yml"
         mode: "0644"
 
-    - name: Upload vault-init.sh (preconfigured in repo)
+    - name: Upload vault-init.sh (from Jenkins Secret file -> infra/ansible/files/)
       ansible.builtin.copy:
-        src: ../../vault-init.sh
+        src: files/vault-init.sh
         dest: "{{ app_dir }}/vault-init.sh"
         mode: "0755"
 
-    - name: Upload vault_root_token.txt (will be overwritten by .env token)
+    - name: Upload vault_root_token.txt (must match VAULT_DEV_ROOT_TOKEN_ID and VAULT_TOKEN in vault-init.sh)
       ansible.builtin.copy:
-        src: ../../vault_root_token.txt
+        src: files/vault_root_token.txt
         dest: "{{ app_dir }}/vault_root_token.txt"
         mode: "0600"
 
