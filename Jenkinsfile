@@ -94,10 +94,10 @@ pipeline {
             cd -
 
             mkdir -p "${ANSIBLE_DIR}"
-            cat > "${ANSIBLE_DIR}/inventory.ini" <<EOF
-            [app]
-            ${VM_IP} ansible_user=${SSH_USER} ansible_ssh_private_key_file=${SSH_KEY_FILE}
-            EOF
+            {
+              echo '[app]'
+              echo "${VM_IP} ansible_user=${SSH_USER} ansible_ssh_private_key_file=${SSH_KEY_FILE}"
+            } > "${ANSIBLE_DIR}/inventory.ini"
 
             cd "${ANSIBLE_DIR}"
             ansible-playbook -i inventory.ini site.yml \
