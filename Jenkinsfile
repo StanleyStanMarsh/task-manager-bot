@@ -4,6 +4,7 @@ pipeline {
   options {
     timestamps()
     ansiColor('xterm')
+    skipDefaultCheckout(true)
   }
 
   environment {
@@ -15,6 +16,7 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
+        deleteDir()
         checkout scm
       }
     }
@@ -120,16 +122,6 @@ pipeline {
     }
   }
 
-  post {
-    always {
-      sh '''
-        set +e
-        if [ -d "${TF_DIR}" ] && [ -f "${TF_DIR}/terraform.tfstate" ]; then
-          cd "${TF_DIR}"
-          terraform output || true
-        fi
-      '''
-    }
-  }
+  // post actions removed: when checkout fails early, workspace context is missing
 }
 
