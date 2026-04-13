@@ -139,4 +139,43 @@ pipeline {
       }
     }
   }
+
+  post {
+    always {
+      script {
+        withCredentials([
+          string(credentialsId: 'YC_TOKEN', variable: 'YC_TOKEN'),
+          string(credentialsId: 'YC_CLOUD_ID', variable: 'YC_CLOUD_ID'),
+          string(credentialsId: 'YC_FOLDER_ID', variable: 'YC_FOLDER_ID'),
+          string(credentialsId: 'YC_SSH_PUBLIC_KEY', variable: 'YC_SSH_PUBLIC_KEY'),
+          string(credentialsId: 'YC_SUBNET_ID', variable: 'YC_SUBNET_ID'),
+          string(credentialsId: 'YC_SECURITY_GROUP_ID', variable: 'YC_SECURITY_GROUP_ID')
+        ]) {
+          sh '''
+            set +e
+            echo "=== Terraform destroy (очистка инфраструктуры, всегда в конце) ==="
+            if [ ! -d "${TF_DIR}" ]; then
+              echo "Каталог ${TF_DIR} отсутствует — пропуск destroy"
+              exit 0
+            fi
+            cd "${TF_DIR}"
+            if [ ! -f terraform.tfstate ] && [ ! -f .terraform/terraform.tfstate ]; then
+              echo "Нет terraform state — пропуск destroy"
+              exit 0
+            fi
+            export YC_TOKEN YC_CLOUD_ID YC_FOLDER_ID
+            terraform init -input=false
+            terraform destroy -auto-approve -input=false \
+              -var "cloud_id=${YC_CLOUD_ID}" \
+              -var "folder_id=${YC_FOLDER_ID}" \
+              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}" \
+              -var "subnet_id=${YC_SUBNET_ID}" \
+              -var "security_group_id=${YC_SECURITY_GROUP_ID}" || true
+            echo "Terraform destroy завершён (код выше мог быть ненулевым)"
+            exit 0
+          '''
+        }
+      }
+    }
+  }
 }
