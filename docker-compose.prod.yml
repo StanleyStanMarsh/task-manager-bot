@@ -53,7 +53,10 @@ services:
     restart: unless-stopped
 
   app:
-    image: "${APP_IMAGE}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: task-manager-bot:local
     container_name: java-app
     depends_on:
       mongo:
@@ -82,4 +85,3 @@ secrets:
 
 volumes:
   mongodb_data:
-

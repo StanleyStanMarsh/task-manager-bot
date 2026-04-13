@@ -5,7 +5,6 @@ pipeline {
     timestamps()
     ansiColor('xterm')
     skipDefaultCheckout(true)
-    // Два параллельных прогона с одним workspace ломают terraform / артефакты
     disableConcurrentBuilds()
   }
 
@@ -72,34 +71,9 @@ pipeline {
       }
     }
 
-    stage('Build & push image to YCR') {
-      steps {
-        withCredentials([
-          string(credentialsId: 'YC_TOKEN', variable: 'YC_TOKEN')
-        ]) {
-          sh '''
-            set -euo pipefail
-            cd "${TF_DIR}"
-            REGISTRY_ID="$(terraform output -raw registry_id)"
-            cd -
-
-            IMAGE_TAG="${GIT_COMMIT:-manual}"
-            APP_IMAGE="cr.yandex/${REGISTRY_ID}/task-manager-bot:${IMAGE_TAG}"
-
-            tar -C "${WORKSPACE}" -cf - . | docker build -t "${APP_IMAGE}" -
-            echo "${YC_TOKEN}" | docker login --username oauth --password-stdin cr.yandex
-            docker push "${APP_IMAGE}"
-
-            echo "${APP_IMAGE}" > .app_image
-          '''
-        }
-      }
-    }
-
     stage('Ansible provision & deploy') {
       steps {
         withCredentials([
-          string(credentialsId: 'YC_TOKEN', variable: 'YC_TOKEN'),
           string(credentialsId: 'VAULT_DEV_ROOT_TOKEN_ID', variable: 'VAULT_DEV_ROOT_TOKEN_ID'),
           string(credentialsId: 'MONGO_INITDB_ROOT_USERNAME', variable: 'MONGO_INITDB_ROOT_USERNAME'),
           string(credentialsId: 'MONGO_INITDB_ROOT_PASSWORD', variable: 'MONGO_INITDB_ROOT_PASSWORD'),
@@ -119,8 +93,6 @@ pipeline {
             VM_IP="$(terraform output -raw vm_external_ip)"
             cd -
 
-            APP_IMAGE="$(cat .app_image)"
-
             mkdir -p "${ANSIBLE_DIR}"
             cat > "${ANSIBLE_DIR}/inventory.ini" <<EOF
             [app]
@@ -129,8 +101,6 @@ pipeline {
 
             cd "${ANSIBLE_DIR}"
             ansible-playbook -i inventory.ini site.yml \
-              -e "yc_token=${YC_TOKEN}" \
-              -e "app_image=${APP_IMAGE}" \
               -e "vault_dev_root_token_id=${VAULT_DEV_ROOT_TOKEN_ID}" \
               -e "mongo_initdb_root_username=${MONGO_INITDB_ROOT_USERNAME}" \
               -e "mongo_initdb_root_password=${MONGO_INITDB_ROOT_PASSWORD}"

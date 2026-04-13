@@ -50,6 +50,26 @@
         group: root
         mode: "0755"
 
+    - name: Ensure target directory for JAR
+      ansible.builtin.file:
+        path: "{{ app_dir }}/target"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Upload Dockerfile for on-VM image build
+      ansible.builtin.copy:
+        src: ../../Dockerfile
+        dest: "{{ app_dir }}/Dockerfile"
+        mode: "0644"
+
+    - name: Upload built JAR from Jenkins workspace
+      ansible.builtin.copy:
+        src: ../../target/task-manager-bot-0.5-DEMO.jar
+        dest: "{{ app_dir }}/target/task-manager-bot-0.5-DEMO.jar"
+        mode: "0644"
+
     - name: Upload docker compose file
       ansible.builtin.copy:
         src: ../../docker-compose.prod.yml
@@ -62,35 +82,27 @@
         dest: "{{ app_dir }}/vault-init.sh"
         mode: "0755"
 
-    - name: Upload vault_root_token.txt (must match VAULT_DEV_ROOT_TOKEN_ID and VAULT_TOKEN in vault-init.sh)
+    - name: Upload vault_root_token.txt
       ansible.builtin.copy:
         src: files/vault_root_token.txt
         dest: "{{ app_dir }}/vault_root_token.txt"
         mode: "0600"
-
-    - name: Docker login to Yandex Container Registry
-      ansible.builtin.shell: |
-        set -euo pipefail
-        echo "{{ yc_token }}" | docker login --username oauth --password-stdin cr.yandex
-      args:
-        executable: /bin/bash
-      no_log: true
 
     - name: Write .env for docker compose
       ansible.builtin.copy:
         dest: "{{ app_dir }}/.env"
         mode: "0600"
         content: |
-          APP_IMAGE={{ app_image }}
           VAULT_DEV_ROOT_TOKEN_ID={{ vault_dev_root_token_id }}
           MONGO_INITDB_ROOT_USERNAME={{ mongo_initdb_root_username }}
           MONGO_INITDB_ROOT_PASSWORD={{ mongo_initdb_root_password }}
 
-    - name: Pull and start services
+    - name: Pull public images and build app image on VM, then start stack
       ansible.builtin.shell: |
         set -euo pipefail
         cd "{{ app_dir }}"
-        docker compose pull
+        docker compose pull vault mongo
+        docker compose build --no-cache app
         docker compose up -d
       args:
         executable: /bin/bash

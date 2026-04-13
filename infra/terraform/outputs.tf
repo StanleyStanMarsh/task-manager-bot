@@ -8,8 +8,3 @@ output "ssh_username" {
   description = "SSH username"
 }
 
-output "registry_id" {
-  value       = yandex_container_registry.registry.registry_id
-  description = "ID реестра для URL cr.yandex/<registry_id>/image:tag"
-}
-
