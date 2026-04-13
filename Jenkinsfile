@@ -11,6 +11,8 @@ pipeline {
     TF_DIR = 'infra/terraform'
     ANSIBLE_DIR = 'infra/ansible'
     APP_DIR = '.'
+    // container name from docker-compose.yml (used for --volumes-from)
+    JENKINS_CONTAINER = 'jenkins-lab'
   }
 
   stages {
@@ -26,7 +28,8 @@ pipeline {
         sh '''
           set -euo pipefail
           docker run --rm \
-            -v "$PWD:/ws" -w "/ws/${APP_DIR}" \
+            --volumes-from "${JENKINS_CONTAINER}" \
+            -w "${WORKSPACE}/${APP_DIR}" \
             maven:3.9.9-eclipse-temurin-23 \
             mvn -B -DskipTests package
         '''
@@ -75,7 +78,9 @@ pipeline {
             IMAGE_TAG="${GIT_COMMIT:-manual}"
             APP_IMAGE="cr.yandex/${REGISTRY_ID}/task-manager-bot:${IMAGE_TAG}"
 
-            docker build -t "${APP_IMAGE}" .
+            # Jenkins runs inside a container, so host paths are not available to the Docker daemon.
+            # Build from a tar stream to avoid bind-mount path issues.
+            tar -C "${WORKSPACE}" -cf - . | docker build -t "${APP_IMAGE}" -
             echo "${YC_TOKEN}" | docker login --username oauth --password-stdin cr.yandex
             docker push "${APP_IMAGE}"
 
