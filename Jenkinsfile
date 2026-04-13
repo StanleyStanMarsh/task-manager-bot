@@ -5,6 +5,8 @@ pipeline {
     timestamps()
     ansiColor('xterm')
     skipDefaultCheckout(true)
+    // Два параллельных прогона с одним workspace ломают terraform / артефакты
+    disableConcurrentBuilds()
   }
 
   environment {
@@ -17,7 +19,10 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        deleteDir()
+        cleanWs(
+          deleteDirs: true,
+          disableDeferredWipeout: true
+        )
         checkout scm
       }
     }
