@@ -9,7 +9,7 @@ output "ssh_username" {
 }
 
 output "registry_id" {
-  value       = yandex_container_registry.registry.id
-  description = "Yandex Container Registry id"
+  value       = yandex_container_registry.registry.registry_id
+  description = "ID реестра для URL cr.yandex/<registry_id>/image:tag"
 }
 
