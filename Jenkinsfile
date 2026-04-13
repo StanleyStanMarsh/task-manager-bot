@@ -99,6 +99,23 @@ pipeline {
               echo "${VM_IP} ansible_user=${SSH_USER} ansible_ssh_private_key_file=${SSH_KEY_FILE}"
             } > "${ANSIBLE_DIR}/inventory.ini"
 
+            echo "Waiting for sshd on ${VM_IP} (fresh VM often needs 30–120s)..."
+            SSH_PROBE_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            READY=0
+            for i in $(seq 1 36); do
+              if ssh ${SSH_PROBE_OPTS} -i "${SSH_KEY_FILE}" "${SSH_USER}@${VM_IP}" "exit 0" 2>/dev/null; then
+                READY=1
+                echo "SSH is up (attempt ${i})."
+                break
+              fi
+              echo "SSH not ready yet (attempt ${i}/36), sleeping 10s..."
+              sleep 10
+            done
+            if [ "${READY}" != 1 ]; then
+              echo "SSH never became ready — check security group (ingress TCP 22) and cloud-init on the VM."
+              exit 1
+            fi
+
             cd "${ANSIBLE_DIR}"
             ansible-playbook -i inventory.ini site.yml \
               -e "vault_dev_root_token_id=${VAULT_DEV_ROOT_TOKEN_ID}" \
