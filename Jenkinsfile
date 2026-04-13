@@ -10,7 +10,7 @@ pipeline {
   environment {
     TF_DIR = 'infra/terraform'
     ANSIBLE_DIR = 'infra/ansible'
-    APP_DIR = 'task-manager-bot'
+    APP_DIR = '.'
   }
 
   stages {
@@ -33,7 +33,7 @@ pipeline {
       }
       post {
         success {
-          archiveArtifacts artifacts: "${APP_DIR}/target/*.jar", fingerprint: true
+          archiveArtifacts artifacts: "target/*.jar", fingerprint: true
         }
       }
     }
@@ -75,7 +75,7 @@ pipeline {
             IMAGE_TAG="${GIT_COMMIT:-manual}"
             APP_IMAGE="cr.yandex/${REGISTRY_ID}/task-manager-bot:${IMAGE_TAG}"
 
-            docker build -t "${APP_IMAGE}" "${APP_DIR}"
+            docker build -t "${APP_IMAGE}" .
             echo "${YC_TOKEN}" | docker login --username oauth --password-stdin cr.yandex
             docker push "${APP_IMAGE}"
 
