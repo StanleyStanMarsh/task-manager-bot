@@ -124,6 +124,8 @@
             exit 1
           fi
         done
+      args:
+        executable: /bin/bash
       register: compose_stack_health
       until: compose_stack_health.rc == 0
       retries: "{{ compose_health_retries | int }}"
