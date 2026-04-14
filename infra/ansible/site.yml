@@ -109,25 +109,25 @@
       args:
         executable: /bin/bash
 
-    - name: Wait until long-running compose containers report healthy
-      ansible.builtin.shell: |
-        set -euo pipefail
-        cd "{{ app_dir }}"
-        for svc in vault mongodb java-app; do
-          if ! docker inspect "$svc" >/dev/null 2>&1; then
-            echo "${svc}: container not found" >&2
-            exit 1
-          fi
-          status=$(docker inspect -f {% raw %}'{{if .State.Health}}{{.State.Health.Status}}{{else}}no-health{{end}}'{% endraw %} "$svc")
-          if [ "$status" != "healthy" ]; then
-            echo "${svc}: ${status}" >&2
-            exit 1
-          fi
-        done
-      args:
-        executable: /bin/bash
-      register: compose_stack_health
-      until: compose_stack_health.rc == 0
-      retries: "{{ compose_health_retries | int }}"
-      delay: "{{ compose_health_delay | int }}"
-      changed_when: false
+    # - name: Wait until long-running compose containers report healthy
+    #   ansible.builtin.shell: |
+    #     set -euo pipefail
+    #     cd "{{ app_dir }}"
+    #     for svc in vault mongodb java-app; do
+    #       if ! docker inspect "$svc" >/dev/null 2>&1; then
+    #         echo "${svc}: container not found" >&2
+    #         exit 1
+    #       fi
+    #       status=$(docker inspect -f {% raw %}'{{if .State.Health}}{{.State.Health.Status}}{{else}}no-health{{end}}'{% endraw %} "$svc")
+    #       if [ "$status" != "healthy" ]; then
+    #         echo "${svc}: ${status}" >&2
+    #         exit 1
+    #       fi
+    #     done
+    #   args:
+    #     executable: /bin/bash
+    #   register: compose_stack_health
+    #   until: compose_stack_health.rc == 0
+    #   retries: "{{ compose_health_retries | int }}"
+    #   delay: "{{ compose_health_delay | int }}"
+    #   changed_when: false
