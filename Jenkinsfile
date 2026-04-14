@@ -117,7 +117,7 @@ pipeline {
             fi
 
             cd "${ANSIBLE_DIR}"
-            ansible-playbook -i inventory.ini site.yml \
+            ansible-playbook -i inventory.ini playbook.yml \
               -e "vault_dev_root_token_id=${VAULT_DEV_ROOT_TOKEN_ID}" \
               -e "mongo_initdb_root_username=${MONGO_INITDB_ROOT_USERNAME}" \
               -e "mongo_initdb_root_password=${MONGO_INITDB_ROOT_PASSWORD}"
