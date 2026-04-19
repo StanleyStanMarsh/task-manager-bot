@@ -231,7 +231,6 @@ pipeline {
               kubectl -n "${NS}" wait --for=condition=complete job/vault-init --timeout=300s
 
               kubectl apply -f "${K8S_DIR}/deployment-app.yaml" -f "${K8S_DIR}/service-app.yaml"
-              kubectl -n "${NS}" rollout restart deployment/task-manager-bot
               kubectl -n "${NS}" rollout status deployment/task-manager-bot --timeout=400s
             '''
           }
