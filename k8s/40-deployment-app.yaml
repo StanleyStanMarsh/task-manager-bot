@@ -45,6 +45,13 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            # Прокси до Telegram API из пода (Xray на Mac): inbound слушает 0.0.0.0, хост — host.minikube.internal или host.docker.internal
+            - name: TELEGRAM_PROXY_HOST
+              value: host.minikube.internal
+            - name: TELEGRAM_PROXY_PORT
+              value: "10808"
+            - name: TELEGRAM_PROXY_TYPE
+              value: SOCKS5
             - name: VAULT_ADDR
               value: http://vault:8200
             - name: VAULT_TOKEN_FILE
