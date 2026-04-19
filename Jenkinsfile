@@ -116,6 +116,7 @@ pipeline {
                     -e 's|\\\\|/|g' \
                     -e 's|C:/|/|g' \
                     -e 's|//|/|g' \
+                    -e 's|https:/|https://|g' \
                 > "${KCFG_FIX}"
               
               echo "=== Оригинальный kubeconfig (первые 20 строк) ==="
@@ -139,7 +140,7 @@ pipeline {
               CLUSTER_NAME="$(kubectl config view --minify -o jsonpath='{.clusters[0].name}' 2>/dev/null || true)"
               SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
               
-              if echo "${SERVER}" | grep -Eq '^https://127[.]0[.]0[.]1:[0-9]+$' && [ -n "${CLUSTER_NAME}" ]; then
+              if echo "${SERVER}" | grep -Eq '^https:/*127[.]0[.]0[.]1:[0-9]+$' && [ -n "${CLUSTER_NAME}" ]; then
                 PORT="${SERVER##*:}"
                 echo "Замена server URL для доступа из контейнера: ${SERVER} -> https://host.docker.internal:${PORT}"
                 kubectl config set-cluster "${CLUSTER_NAME}" \
@@ -164,7 +165,7 @@ pipeline {
                         # Обновляем путь в конфиге
                         USER_NAME="$(kubectl config view --minify -o jsonpath='{.users[0].name}' 2>/dev/null || true)"
                         if [ -n "${USER_NAME}" ]; then
-                          kubectl config set-credentials "${USER_NAME}" --client-certificate="${SEARCH_PATH}${CERT_NAME}" --embed-certs=true
+                          kubectl config set-credentials "${USER_NAME}" --client-certificate="${SEARCH_PATH}${CERT_NAME}"
                         fi
                         break
                       fi
@@ -177,7 +178,7 @@ pipeline {
 
               # Создание финального конфига с встроенными сертификатами
               echo "Создание финального kubeconfig с встроенными сертификатами..."
-              kubectl config view --flatten --embed-certs=true > "${WORKSPACE}/.kubeconfig-run"
+              kubectl config view --flatten > "${WORKSPACE}/.kubeconfig-run"
               export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
               
               echo "✅ Kubeconfig подготовлен"
