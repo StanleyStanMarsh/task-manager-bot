@@ -8,11 +8,45 @@ pipeline {
     disableConcurrentBuilds()
   }
 
+  parameters {
+    booleanParam(
+      name: 'SKIP_K8S_DEPLOY',
+      defaultValue: false,
+      description: 'Только сборка JAR и Docker-образ без kubectl.'
+    )
+    booleanParam(
+      name: 'USE_LOCAL_K8S_CLUSTER',
+      defaultValue: true,
+      description: 'Локальный образ без registry + imagePullPolicy Never. Вместе с MINIKUBE_IMAGE_LOAD — выкат в minikube.'
+    )
+    booleanParam(
+      name: 'MINIKUBE_IMAGE_LOAD',
+      defaultValue: false,
+      description: 'Включите для minikube: после docker build выполнится minikube image load (driver docker на Mac, том ~/.minikube в compose). Выключено — тот же сценарий, что и Kubernetes в Docker Desktop (общий Docker, без load).'
+    )
+    string(
+      name: 'MINIKUBE_PROFILE',
+      defaultValue: 'minikube',
+      description: 'Профиль minikube (имя контекста kubectl по умолчанию совпадает с профилем).'
+    )
+    string(
+      name: 'KUBERNETES_CONTEXT',
+      defaultValue: '',
+      description: 'Контекст kubectl (пусто: если включён MINIKUBE_IMAGE_LOAD — берётся MINIKUBE_PROFILE, иначе текущий из kubeconfig).'
+    )
+    string(
+      name: 'IMAGE_REGISTRY',
+      defaultValue: '',
+      description: 'Если USE_LOCAL_K8S_CLUSTER выключен: реестр без завершающего /, образ <registry>/task-manager-bot:<BUILD_NUMBER>'
+    )
+  }
+
   environment {
-    TF_DIR = 'infra/terraform'
-    ANSIBLE_DIR = 'infra/ansible'
     APP_DIR = '.'
     JENKINS_CONTAINER = 'jenkins-lab'
+    K8S_DIR = 'k8s'
+    K8S_NAMESPACE = 'task-manager-bot'
+    IMAGE_NAME = 'task-manager-bot'
   }
 
   stages {
@@ -39,128 +73,156 @@ pipeline {
       }
       post {
         success {
-          archiveArtifacts artifacts: "target/*.jar", fingerprint: true
+          archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
         }
       }
     }
 
-    stage('Terraform init/apply') {
+    stage('Docker build') {
       steps {
-        withCredentials([
-          string(credentialsId: 'YC_TOKEN', variable: 'YC_TOKEN'),
-          string(credentialsId: 'YC_CLOUD_ID', variable: 'YC_CLOUD_ID'),
-          string(credentialsId: 'YC_FOLDER_ID', variable: 'YC_FOLDER_ID'),
-          string(credentialsId: 'YC_SSH_PUBLIC_KEY', variable: 'YC_SSH_PUBLIC_KEY'),
-          string(credentialsId: 'YC_SUBNET_ID', variable: 'YC_SUBNET_ID'),
-          string(credentialsId: 'YC_SECURITY_GROUP_ID', variable: 'YC_SECURITY_GROUP_ID')
-        ]) {
-          sh '''
-            set -euo pipefail
-            export YC_TOKEN YC_CLOUD_ID YC_FOLDER_ID
-
-            cd "${TF_DIR}"
-            terraform init -input=false
-            terraform apply -auto-approve -input=false \
-              -var "cloud_id=${YC_CLOUD_ID}" \
-              -var "folder_id=${YC_FOLDER_ID}" \
-              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}" \
-              -var "subnet_id=${YC_SUBNET_ID}" \
-              -var "security_group_id=${YC_SECURITY_GROUP_ID}"
-          '''
-        }
+        sh '''
+          set -euo pipefail
+          docker build --platform linux/arm64 -t "${IMAGE_NAME}:${BUILD_NUMBER}" .
+        '''
       }
     }
 
-    stage('Ansible provision & deploy') {
+    stage('Minikube image load') {
+      when {
+        allOf {
+          expression { return !params.SKIP_K8S_DEPLOY }
+          expression { return params.USE_LOCAL_K8S_CLUSTER }
+          expression { return params.MINIKUBE_IMAGE_LOAD }
+        }
+      }
       steps {
-        withCredentials([
-          string(credentialsId: 'VAULT_DEV_ROOT_TOKEN_ID', variable: 'VAULT_DEV_ROOT_TOKEN_ID'),
-          string(credentialsId: 'MONGO_INITDB_ROOT_USERNAME', variable: 'MONGO_INITDB_ROOT_USERNAME'),
-          string(credentialsId: 'MONGO_INITDB_ROOT_PASSWORD', variable: 'MONGO_INITDB_ROOT_PASSWORD'),
-          file(credentialsId: 'VAULT_INIT_SH', variable: 'CRED_VAULT_INIT_SH'),
-          sshUserPrivateKey(credentialsId: 'YC_SSH_KEY', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')
-        ]) {
+        withEnv(["MINIKUBE_PROFILE=${params.MINIKUBE_PROFILE}"]) {
           sh '''
             set -euo pipefail
-
-            mkdir -p "${ANSIBLE_DIR}/files"
-            cp "${CRED_VAULT_INIT_SH}" "${ANSIBLE_DIR}/files/vault-init.sh"
-            chmod 0755 "${ANSIBLE_DIR}/files/vault-init.sh"
-            printf '%s\n' "${VAULT_DEV_ROOT_TOKEN_ID}" > "${ANSIBLE_DIR}/files/vault_root_token.txt"
-            chmod 0600 "${ANSIBLE_DIR}/files/vault_root_token.txt"
-
-            cd "${TF_DIR}"
-            VM_IP="$(terraform output -raw vm_external_ip)"
-            cd -
-
-            mkdir -p "${ANSIBLE_DIR}"
-            {
-              echo '[app]'
-              echo "${VM_IP} ansible_user=${SSH_USER} ansible_ssh_private_key_file=${SSH_KEY_FILE}"
-            } > "${ANSIBLE_DIR}/inventory.ini"
-
-            echo "Waiting for sshd on ${VM_IP} (fresh VM often needs 30–120s)..."
-            SSH_PROBE_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            READY=0
-            for i in $(seq 1 36); do
-              if ssh ${SSH_PROBE_OPTS} -i "${SSH_KEY_FILE}" "${SSH_USER}@${VM_IP}" "exit 0" 2>/dev/null; then
-                READY=1
-                echo "SSH is up (attempt ${i})."
-                break
-              fi
-              echo "SSH not ready yet (attempt ${i}/36), sleeping 10s..."
-              sleep 10
-            done
-            if [ "${READY}" != 1 ]; then
-              echo "SSH never became ready — check security group (ingress TCP 22) and cloud-init on the VM."
+            export MINIKUBE_HOME=/var/jenkins_home/.minikube-host
+            if [ ! -d "${MINIKUBE_HOME}/profiles/${MINIKUBE_PROFILE}" ]; then
+              echo "Нет ${MINIKUBE_HOME}/profiles/${MINIKUBE_PROFILE}. На Mac выполните: minikube start --driver=docker" >&2
+              echo "И смонтируйте ~/.minikube в jenkins (см. cloud_study/docker-compose.yml)." >&2
               exit 1
             fi
-
-            cd "${ANSIBLE_DIR}"
-            ansible-playbook -i inventory.ini site.yml \
-              -e "vault_dev_root_token_id=${VAULT_DEV_ROOT_TOKEN_ID}" \
-              -e "mongo_initdb_root_username=${MONGO_INITDB_ROOT_USERNAME}" \
-              -e "mongo_initdb_root_password=${MONGO_INITDB_ROOT_PASSWORD}"
+            minikube version
+            minikube image load "${IMAGE_NAME}:${BUILD_NUMBER}" --profile="${MINIKUBE_PROFILE}"
           '''
         }
       }
     }
-  }
 
-  post {
-    always {
-      script {
-        withCredentials([
-          string(credentialsId: 'YC_TOKEN', variable: 'YC_TOKEN'),
-          string(credentialsId: 'YC_CLOUD_ID', variable: 'YC_CLOUD_ID'),
-          string(credentialsId: 'YC_FOLDER_ID', variable: 'YC_FOLDER_ID'),
-          string(credentialsId: 'YC_SSH_PUBLIC_KEY', variable: 'YC_SSH_PUBLIC_KEY'),
-          string(credentialsId: 'YC_SUBNET_ID', variable: 'YC_SUBNET_ID'),
-          string(credentialsId: 'YC_SECURITY_GROUP_ID', variable: 'YC_SECURITY_GROUP_ID')
-        ]) {
-          sh '''
-            set +e
-            echo "=== Terraform destroy (очистка инфраструктуры, всегда в конце) ==="
-            if [ ! -d "${TF_DIR}" ]; then
-              echo "Каталог ${TF_DIR} отсутствует — пропуск destroy"
-              exit 0
-            fi
-            cd "${TF_DIR}"
-            if [ ! -f terraform.tfstate ] && [ ! -f .terraform/terraform.tfstate ]; then
-              echo "Нет terraform state — пропуск destroy"
-              exit 0
-            fi
-            export YC_TOKEN YC_CLOUD_ID YC_FOLDER_ID
-            terraform init -input=false
-            terraform destroy -auto-approve -input=false \
-              -var "cloud_id=${YC_CLOUD_ID}" \
-              -var "folder_id=${YC_FOLDER_ID}" \
-              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}" \
-              -var "subnet_id=${YC_SUBNET_ID}" \
-              -var "security_group_id=${YC_SECURITY_GROUP_ID}" || true
-            echo "Terraform destroy завершён (код выше мог быть ненулевым)"
-            exit 0
-          '''
+    stage('Push image to registry') {
+      when {
+        allOf {
+          expression { return !params.SKIP_K8S_DEPLOY }
+          expression { return !params.USE_LOCAL_K8S_CLUSTER }
+          expression { return params.IMAGE_REGISTRY?.trim() }
+        }
+      }
+      steps {
+        sh '''
+          set -euo pipefail
+          REG="${IMAGE_REGISTRY%/}"
+          docker tag "${IMAGE_NAME}:${BUILD_NUMBER}" "${REG}/${IMAGE_NAME}:${BUILD_NUMBER}"
+          docker push "${REG}/${IMAGE_NAME}:${BUILD_NUMBER}"
+        '''
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      when {
+        expression { return !params.SKIP_K8S_DEPLOY }
+      }
+      steps {
+        script {
+          def kubeCtx = params.KUBERNETES_CONTEXT?.trim()
+          if (!kubeCtx && params.MINIKUBE_IMAGE_LOAD) {
+            kubeCtx = params.MINIKUBE_PROFILE ?: 'minikube'
+          }
+          withEnv([
+            "USE_LOCAL_K8S_CLUSTER=${params.USE_LOCAL_K8S_CLUSTER}",
+            "IMAGE_REGISTRY_PARAM=${params.IMAGE_REGISTRY ?: ''}",
+            "KUBERNETES_CONTEXT_PARAM=${kubeCtx ?: ''}"
+          ]) {
+            withCredentials([
+              file(credentialsId: 'VAULT_INIT_SH', variable: 'CRED_VAULT_INIT_SH'),
+              string(credentialsId: 'VAULT_DEV_ROOT_TOKEN_ID', variable: 'VAULT_DEV_ROOT_TOKEN_ID'),
+              string(credentialsId: 'MONGO_INITDB_ROOT_USERNAME', variable: 'MONGO_INITDB_ROOT_USERNAME'),
+              string(credentialsId: 'MONGO_INITDB_ROOT_PASSWORD', variable: 'MONGO_INITDB_ROOT_PASSWORD')
+            ]) {
+              sh '''
+                set -euo pipefail
+
+                if [ -n "${KUBECONFIG:-}" ] && [ -f "${KUBECONFIG}" ]; then
+                  echo "Using KUBECONFIG=${KUBECONFIG}"
+                elif [ -f /var/jenkins_home/.kube-host/config ]; then
+                  export KUBECONFIG=/var/jenkins_home/.kube-host/config
+                  echo "Using mounted ~/.kube from host: ${KUBECONFIG}"
+                elif [ -f /var/jenkins_home/.kube/config ]; then
+                  export KUBECONFIG=/var/jenkins_home/.kube/config
+                  echo "Using ${KUBECONFIG}"
+                else
+                  echo "Не найден kubeconfig. Смонтируйте ~/.kube в docker-compose или задайте KUBECONFIG." >&2
+                  exit 1
+                fi
+
+                WORK_KUBECONFIG="${WORKSPACE}/.kubeconfig-jenkins-${BUILD_NUMBER}"
+                kubectl config view --raw > "${WORK_KUBECONFIG}"
+                export KUBECONFIG="${WORK_KUBECONFIG}"
+                if [ -n "${KUBERNETES_CONTEXT_PARAM}" ]; then
+                  kubectl config use-context "${KUBERNETES_CONTEXT_PARAM}"
+                fi
+
+                kubectl cluster-info
+
+                if [ "${USE_LOCAL_K8S_CLUSTER}" = "true" ]; then
+                  FULL_IMAGE="${IMAGE_NAME}:${BUILD_NUMBER}"
+                  PULL_POLICY="Never"
+                else
+                  REG="${IMAGE_REGISTRY_PARAM}"
+                  REG="${REG%/}"
+                  if [ -z "${REG}" ]; then
+                    echo "Для деплоя без USE_LOCAL_K8S_CLUSTER задайте IMAGE_REGISTRY." >&2
+                    exit 1
+                  fi
+                  FULL_IMAGE="${REG}/${IMAGE_NAME}:${BUILD_NUMBER}"
+                  PULL_POLICY="Always"
+                fi
+
+                NS="${K8S_NAMESPACE}"
+                cp "${CRED_VAULT_INIT_SH}" "${WORKSPACE}/.vault-init-from-jenkins.sh"
+                chmod 0755 "${WORKSPACE}/.vault-init-from-jenkins.sh"
+
+                kubectl apply -f "${K8S_DIR}/00-namespace.yaml"
+                kubectl -n "${NS}" create secret generic mongo-creds \
+                  --from-literal=username="${MONGO_INITDB_ROOT_USERNAME}" \
+                  --from-literal=password="${MONGO_INITDB_ROOT_PASSWORD}" \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                kubectl -n "${NS}" create secret generic vault-root \
+                  --from-literal=token="${VAULT_DEV_ROOT_TOKEN_ID}" \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                kubectl -n "${NS}" create configmap vault-init-script \
+                  --from-file=vault-init.sh="${WORKSPACE}/.vault-init-from-jenkins.sh" \
+                  --dry-run=client -o yaml | kubectl apply -f -
+
+                kubectl apply -f "${K8S_DIR}/10-mongodb.yaml" -f "${K8S_DIR}/20-vault.yaml"
+                kubectl -n "${NS}" rollout status deployment/mongodb --timeout=180s
+                kubectl -n "${NS}" rollout status deployment/vault --timeout=180s
+
+                kubectl -n "${NS}" delete job vault-init --ignore-not-found
+                kubectl apply -f "${K8S_DIR}/30-job-vault-init.yaml"
+                kubectl -n "${NS}" wait --for=condition=complete job/vault-init --timeout=300s
+
+                sed \
+                  -e "s|IMAGE_PLACEHOLDER|${FULL_IMAGE}|g" \
+                  -e "s|imagePullPolicy: Always|imagePullPolicy: ${PULL_POLICY}|g" \
+                  "${K8S_DIR}/40-deployment-app.yaml" | kubectl apply -f -
+                kubectl apply -f "${K8S_DIR}/50-service-app.yaml"
+                kubectl -n "${NS}" rollout status deployment/task-manager-bot --timeout=400s
+              '''
+            }
+          }
         }
       }
     }

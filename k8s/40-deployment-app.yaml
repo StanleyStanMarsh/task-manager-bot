@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-manager-bot
+  namespace: task-manager-bot
+  labels:
+    app: task-manager-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: task-manager-bot
+  template:
+    metadata:
+      labels:
+        app: task-manager-bot
+    spec:
+      initContainers:
+        - name: wait-vault-kv
+          image: vault:1.13.3
+          env:
+            - name: VAULT_ADDR
+              value: http://vault:8200
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-root
+                  key: token
+          command:
+            - sh
+            - -c
+            - |
+              for i in $(seq 1 90); do
+                if vault kv get secret/task-manager-bot >/dev/null 2>&1; then
+                  exit 0
+                fi
+                sleep 4
+              done
+              echo "timeout waiting for secret/task-manager-bot" >&2
+              exit 1
+      containers:
+        - name: app
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VAULT_ADDR
+              value: http://vault:8200
+            - name: VAULT_TOKEN_FILE
+              value: /run/secrets/vault_root_token
+          volumeMounts:
+            - name: vault-token
+              mountPath: /run/secrets
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8080
+            initialDelaySeconds: 25
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+      volumes:
+        - name: vault-token
+          secret:
+            secretName: vault-root
+            items:
+              - key: token
+                path: vault_root_token
