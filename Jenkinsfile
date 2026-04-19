@@ -102,7 +102,11 @@ pipeline {
               echo "Нет kubeconfig. Смонтируйте ~/.kube в docker-compose." >&2
               exit 1
             fi
-            kubectl config view --raw > "${WORKSPACE}/.kubeconfig-run"
+            # В config с Mac абсолютные пути /Users/.../.minikube — в контейнере их нет; том ~/.minikube → .minikube-host
+            KCFG_FIX="${WORKSPACE}/.kubeconfig-pathfix"
+            sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' "${KUBECONFIG}" > "${KCFG_FIX}"
+            export KUBECONFIG="${KCFG_FIX}"
+            kubectl config view --flatten > "${WORKSPACE}/.kubeconfig-run"
             export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
           '''
 
