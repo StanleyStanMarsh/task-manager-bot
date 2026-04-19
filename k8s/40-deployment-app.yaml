@@ -48,10 +48,10 @@ spec:
             - name: VAULT_ADDR
               value: http://vault:8200
             - name: VAULT_TOKEN_FILE
-              value: /run/secrets/vault_root_token
+              value: /etc/vault/vault_root_token
           volumeMounts:
             - name: vault-token
-              mountPath: /run/secrets
+              mountPath: /etc/vault
               readOnly: true
           readinessProbe:
             httpGet:
