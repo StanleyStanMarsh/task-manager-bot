@@ -38,40 +38,45 @@ pipeline {
       }
     }
 
-    // Как у коллеги: сборка + образ; вместо kind load — minikube docker-env (образ сразу в Docker узла minikube)
-    stage('Build & Dockerize') {
+    stage('Build JAR') {
       steps {
-        script {
-          echo '🔨 Building JAR (JDK 23)...'
-          sh '''
-            set -euo pipefail
-            export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
-            docker run --rm \
-              --volumes-from "${JENKINS_CONTAINER}" \
-              -w "${WORKSPACE}/${PROJECT_DIR}" \
-              maven:3.9.9-eclipse-temurin-23 \
-              mvn -B -DskipTests package
-          '''
-
-          echo '🐳 Building Docker image into minikube Docker (аналог kind load docker-image)...'
-          sh """
-            set -euo pipefail
-            export PATH="/usr/local/bin:/usr/bin:/bin:\${PATH}"
-            export MINIKUBE_HOME="${env.MINIKUBE_HOME}"
-            set +u
-            eval "\$(minikube docker-env -p ${params.MINIKUBE_PROFILE})"
-            set -u
-            docker build --platform linux/arm64 -t ${env.IMAGE_NAME} .
-            set +u
-            eval "\$(minikube docker-env -u)"
-            set -u
-          """
-        }
+        sh '''
+          set -euo pipefail
+          export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
+          docker run --rm \
+            --volumes-from "${JENKINS_CONTAINER}" \
+            -w "${WORKSPACE}/${PROJECT_DIR}" \
+            maven:3.9.9-eclipse-temurin-23 \
+            mvn -B -DskipTests package
+        '''
       }
       post {
         success {
           archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
         }
+      }
+    }
+
+    stage('Docker build & load to minikube') {
+      steps {
+        sh """
+          set -euo pipefail
+          export PATH="/usr/local/bin:/usr/bin:/bin:\${PATH}"
+          docker build --platform linux/arm64 -t ${env.IMAGE_NAME} .
+
+          PROFILE='${params.MINIKUBE_PROFILE}'
+          MNODE=\$(docker ps --filter "label=name.minikube.sigs.k8s.io=\${PROFILE}" --format '{{.Names}}' | head -n1)
+          if [ -z "\${MNODE}" ]; then
+            MNODE=\$(docker ps --format '{{.Names}}' | grep -E "^\${PROFILE}\$|^\${PROFILE}-" | head -n1)
+          fi
+          if [ -z "\${MNODE}" ]; then
+            echo "Не найден контейнер узла minikube (профиль \${PROFILE}). На Mac: minikube status" >&2
+            docker ps -a --format 'table {{.Names}}\\t{{.Image}}' | head -25 >&2 || true
+            exit 1
+          fi
+          echo "Узел minikube (контейнер): \${MNODE}"
+          docker save ${env.IMAGE_NAME} | docker exec -i "\${MNODE}" docker load
+        """
       }
     }
 
