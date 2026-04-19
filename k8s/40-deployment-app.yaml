@@ -40,8 +40,8 @@ spec:
               exit 1
       containers:
         - name: app
-          image: IMAGE_PLACEHOLDER
-          imagePullPolicy: Always
+          image: task-manager-bot:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:
