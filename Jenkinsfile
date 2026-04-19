@@ -148,7 +148,7 @@ pipeline {
               cp "${CRED_VAULT_INIT_SH}" "${WORKSPACE}/.vault-init-from-jenkins.sh"
               chmod 0755 "${WORKSPACE}/.vault-init-from-jenkins.sh"
 
-              kubectl apply -f "${K8S_DIR}/00-namespace.yaml"
+              kubectl apply -f "${K8S_DIR}/namespace.yaml"
               kubectl -n "${NS}" create secret generic mongo-creds \
                 --from-literal=username="${MONGO_INITDB_ROOT_USERNAME}" \
                 --from-literal=password="${MONGO_INITDB_ROOT_PASSWORD}" \
@@ -160,15 +160,15 @@ pipeline {
                 --from-file=vault-init.sh="${WORKSPACE}/.vault-init-from-jenkins.sh" \
                 --dry-run=client -o yaml | kubectl apply -f -
 
-              kubectl apply -f "${K8S_DIR}/10-mongodb.yaml" -f "${K8S_DIR}/20-vault.yaml"
+              kubectl apply -f "${K8S_DIR}/mongodb.yaml" -f "${K8S_DIR}/vault.yaml"
               kubectl -n "${NS}" rollout status deployment/mongodb --timeout=180s
               kubectl -n "${NS}" rollout status deployment/vault --timeout=180s
 
               kubectl -n "${NS}" delete job vault-init --ignore-not-found
-              kubectl apply -f "${K8S_DIR}/30-job-vault-init.yaml"
+              kubectl apply -f "${K8S_DIR}/job-vault-init.yaml"
               kubectl -n "${NS}" wait --for=condition=complete job/vault-init --timeout=300s
 
-              kubectl apply -f "${K8S_DIR}/40-deployment-app.yaml" -f "${K8S_DIR}/50-service-app.yaml"
+              kubectl apply -f "${K8S_DIR}/deployment-app.yaml" -f "${K8S_DIR}/service-app.yaml"
               kubectl -n "${NS}" rollout restart deployment/task-manager-bot
               kubectl -n "${NS}" rollout status deployment/task-manager-bot --timeout=400s
             '''
