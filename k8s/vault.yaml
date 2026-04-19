@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: task-manager-bot
+  labels:
+    app: vault
+spec:
+  ports:
+    - port: 8200
+      targetPort: 8200
+  selector:
+    app: vault
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+  namespace: task-manager-bot
+  labels:
+    app: vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      containers:
+        - name: vault
+          image: vault:1.13.3
+          args:
+            - server
+            - -dev
+            - -dev-listen-address=0.0.0.0:8200
+          ports:
+            - containerPort: 8200
+          env:
+            - name: VAULT_DEV_ROOT_TOKEN_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vault-root
+                  key: token
+            - name: VAULT_ADDR
+              value: http://127.0.0.1:8200
+          securityContext:
+            capabilities:
+              add:
+                - IPC_LOCK
+          readinessProbe:
+            exec:
+              command:
+                - vault
+                - status
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5

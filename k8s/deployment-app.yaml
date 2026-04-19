@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-manager-bot
+  namespace: task-manager-bot
+  labels:
+    app: task-manager-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: task-manager-bot
+  template:
+    metadata:
+      labels:
+        app: task-manager-bot
+    spec:
+      initContainers:
+        - name: wait-vault-kv
+          image: vault:1.13.3
+          env:
+            - name: VAULT_ADDR
+              value: http://vault:8200
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-root
+                  key: token
+          command:
+            - sh
+            - -c
+            - |
+              for i in $(seq 1 90); do
+                if vault kv get secret/task-manager-bot >/dev/null 2>&1; then
+                  exit 0
+                fi
+                sleep 4
+              done
+              echo "timeout waiting for secret/task-manager-bot" >&2
+              exit 1
+      containers:
+        - name: app
+          image: task-manager-bot:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            # Прокси до Telegram API из пода (Xray на Mac): inbound слушает 0.0.0.0, хост — host.minikube.internal или host.docker.internal
+            - name: TELEGRAM_PROXY_HOST
+              value: host.minikube.internal
+            - name: TELEGRAM_PROXY_PORT
+              value: "10808"
+            - name: TELEGRAM_PROXY_TYPE
+              value: SOCKS5
+            - name: VAULT_ADDR
+              value: http://vault:8200
+            - name: VAULT_TOKEN_FILE
+              value: /etc/vault/vault_root_token
+          volumeMounts:
+            - name: vault-token
+              mountPath: /etc/vault
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8080
+            initialDelaySeconds: 25
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+      volumes:
+        - name: vault-token
+          secret:
+            secretName: vault-root
+            items:
+              - key: token
+                path: vault_root_token
