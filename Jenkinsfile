@@ -108,12 +108,14 @@ pipeline {
               sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' "${KUBECONFIG}" > "${KCFG_FIX}"
               export KUBECONFIG="${KCFG_FIX}"
 
-              # Для minikube(docker driver) kubeconfig часто содержит server https://127.0.0.1:<порт>.
-              # Внутри контейнера Jenkins это "сам контейнер", поэтому переписываем на хост.
-              SERVER="$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"${MINIKUBE_PROFILE}\")].cluster.server}" 2>/dev/null || true)"
-              if echo "${SERVER}" | grep -Eq '^https://127[.]0[.]0[.]1:[0-9]+$'; then
+              # Для minikube(docker driver) server часто https://127.0.0.1:<порт> — в контейнере это не API minikube.
+              # Имя кластера в kubeconfig не всегда совпадает с именем контекста, поэтому берём server через --minify.
+              kubectl config use-context "${MINIKUBE_PROFILE}"
+              CLUSTER_NAME="$(kubectl config view --minify -o jsonpath='{.clusters[0].name}' 2>/dev/null || true)"
+              SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+              if echo "${SERVER}" | grep -Eq '^https://127[.]0[.]0[.]1:[0-9]+$' && [ -n "${CLUSTER_NAME}" ]; then
                 PORT="${SERVER##*:}"
-                kubectl config set-cluster "${MINIKUBE_PROFILE}" \
+                kubectl config set-cluster "${CLUSTER_NAME}" \
                   --server="https://host.docker.internal:${PORT}" \
                   --insecure-skip-tls-verify=true >/dev/null
               fi
