@@ -17,7 +17,7 @@ pipeline {
     string(
       name: 'MINIKUBE_PROFILE',
       defaultValue: 'minikube',
-      description: 'Профиль minikube (как --name у kind). Драйвер на Mac: docker.'
+      description: 'Профиль minikube (как --name у kind).'
     )
   }
 
@@ -70,7 +70,7 @@ pipeline {
             MNODE=\$(docker ps --format '{{.Names}}' | grep -E "^\${PROFILE}\$|^\${PROFILE}-" | head -n1)
           fi
           if [ -z "\${MNODE}" ]; then
-            echo "Не найден контейнер узла minikube (профиль \${PROFILE}). На Mac: minikube status" >&2
+            echo "Не найден контейнер узла minikube (профиль \${PROFILE})." >&2
             docker ps -a --format 'table {{.Names}}\\t{{.Image}}' | head -25 >&2 || true
             exit 1
           fi
@@ -91,8 +91,9 @@ pipeline {
             sh '''
               set -euo pipefail
               export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
-              command -v kubectl >/dev/null 2>&1 || { echo "Пересоберите образ Jenkins (cloud_study/Dockerfile)."; exit 1; }
+              command -v kubectl >/dev/null 2>&1 || { echo "kubectl не найден. Установите kubectl в образ Jenkins."; exit 1; }
 
+              # Поиск kubeconfig
               if [ -n "${KUBECONFIG:-}" ] && [ -f "${KUBECONFIG}" ]; then
                 :
               elif [ -f /var/jenkins_home/.kube-host/config ]; then
@@ -103,25 +104,42 @@ pipeline {
                 echo "Нет kubeconfig. Смонтируйте ~/.kube в docker-compose." >&2
                 exit 1
               fi
-              # В config с Mac абсолютные пути /Users/.../.minikube — в контейнере их нет; том ~/.minikube → .minikube-host
+              
+              # Исправление путей в kubeconfig для работы в контейнере
               KCFG_FIX="${WORKSPACE}/.kubeconfig-pathfix"
-              sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' "${KUBECONFIG}" > "${KCFG_FIX}"
+              
+              sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
+                  -e 's#C:\\\\Users\\\\[^\\\\]*\\\\[.]minikube#/var/jenkins_home/.minikube-host#g' \
+                  -e 's#C:/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
+                  "${KUBECONFIG}" > "${KCFG_FIX}"
+              
               export KUBECONFIG="${KCFG_FIX}"
 
-              # Для minikube(docker driver) server часто https://127.0.0.1:<порт> — в контейнере это не API minikube.
-              # Имя кластера в kubeconfig не всегда совпадает с именем контекста, поэтому берём server через --minify.
-              kubectl config use-context "${MINIKUBE_PROFILE}"
+              # Установка контекста
+              kubectl config use-context "${MINIKUBE_PROFILE}" || {
+                echo "Не удалось переключиться на контекст ${MINIKUBE_PROFILE}"
+                echo "Доступные контексты:"
+                kubectl config get-contexts
+                exit 1
+              }
+              
+              # Исправление server URL для доступа из контейнера
               CLUSTER_NAME="$(kubectl config view --minify -o jsonpath='{.clusters[0].name}' 2>/dev/null || true)"
               SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+              
               if echo "${SERVER}" | grep -Eq '^https://127[.]0[.]0[.]1:[0-9]+$' && [ -n "${CLUSTER_NAME}" ]; then
                 PORT="${SERVER##*:}"
+                echo "Замена server URL для доступа из контейнера: ${SERVER} -> https://host.docker.internal:${PORT}"
                 kubectl config set-cluster "${CLUSTER_NAME}" \
                   --server="https://host.docker.internal:${PORT}" \
                   --insecure-skip-tls-verify=true >/dev/null
               fi
 
+              # Создание финального конфига
               kubectl config view --flatten > "${WORKSPACE}/.kubeconfig-run"
               export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
+              
+              echo "✅ Kubeconfig подготовлен"
             '''
           }
 
@@ -130,7 +148,9 @@ pipeline {
             export PATH="/usr/local/bin:/usr/bin:/bin:\${PATH}"
             export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
             kubectl config use-context ${params.MINIKUBE_PROFILE}
+            echo "Проверка подключения к кластеру:"
             kubectl cluster-info
+            kubectl get nodes
           """
 
           withCredentials([
