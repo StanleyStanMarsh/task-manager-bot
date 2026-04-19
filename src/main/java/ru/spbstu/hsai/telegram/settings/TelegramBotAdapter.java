@@ -3,6 +3,7 @@ package ru.spbstu.hsai.telegram.settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.bots.DefaultBotOptions;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -21,7 +22,11 @@ public class TelegramBotAdapter extends TelegramLongPollingBot {
     String username;
     private final UpdateReceiveService updateService;
 
-    public TelegramBotAdapter(BotProperties botProperties, UpdateReceiveService updateService) {
+    public TelegramBotAdapter(
+            DefaultBotOptions botOptions,
+            BotProperties botProperties,
+            UpdateReceiveService updateService) {
+        super(botOptions, botProperties.token());
         this.token = botProperties.token();
         this.username = botProperties.botUsername();
         this.updateService = updateService;
