@@ -108,15 +108,14 @@ pipeline {
               # Исправление путей в kubeconfig для работы в контейнере
               KCFG_FIX="${WORKSPACE}/.kubeconfig-pathfix"
               
-              # Многоэтапная замена путей
+              # Многоэтапная замена путей с правильным экранированием
               cat "${KUBECONFIG}" | \
-                sed -e 's#C:\\\\Users\\\\[^\\\\]*\\\\[.]minikube#/var/jenkins_home/.minikube-host#g' \
-                    -e 's#C:/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
-                    -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
-                    -e 's#\\\\#/#g' \
-                    -e 's#\\#/#g' \
-                    -e 's#C:/#/#g' \
-                    -e 's#//#/#g' \
+                sed -e 's|C:\\\\Users\\\\[^\\\\]*\\\\[.]minikube|/var/jenkins_home/.minikube-host|g' \
+                    -e 's|C:/Users/[^/]*/[.]minikube|/var/jenkins_home/.minikube-host|g' \
+                    -e 's|/Users/[^/]*/[.]minikube|/var/jenkins_home/.minikube-host|g' \
+                    -e 's|\\\\|/|g' \
+                    -e 's|C:/|/|g' \
+                    -e 's|//|/|g' \
                 > "${KCFG_FIX}"
               
               echo "=== Оригинальный kubeconfig (первые 20 строк) ==="
@@ -148,22 +147,37 @@ pipeline {
                   --insecure-skip-tls-verify=true >/dev/null
               fi
 
-              # Дополнительная проверка и исправление путей к сертификатам
+              # Проверка существования сертификатов
               echo "Проверка путей к сертификатам..."
               CERT_PATH="$(kubectl config view --minify -o jsonpath='{.users[0].user.client-certificate}' 2>/dev/null || true)"
-              if [ -n "${CERT_PATH}" ] && [ ! -f "${CERT_PATH}" ]; then
-                echo "⚠️  Путь к сертификату не существует: ${CERT_PATH}"
-                # Попытка найти сертификат в minikube-host
-                CERT_NAME=$(basename "${CERT_PATH}")
-                if [ -f "/var/jenkins_home/.minikube-host/${CERT_NAME}" ]; then
-                  echo "✅ Найден сертификат: /var/jenkins_home/.minikube-host/${CERT_NAME}"
-                elif [ -f "/var/jenkins_home/.minikube-host/profiles/${MINIKUBE_PROFILE}/${CERT_NAME}" ]; then
-                  echo "✅ Найден сертификат в профиле: /var/jenkins_home/.minikube-host/profiles/${MINIKUBE_PROFILE}/${CERT_NAME}"
+              if [ -n "${CERT_PATH}" ]; then
+                echo "Путь к сертификату в конфиге: ${CERT_PATH}"
+                if [ ! -f "${CERT_PATH}" ]; then
+                  echo "⚠️  Сертификат не найден по пути: ${CERT_PATH}"
+                  # Попытка найти сертификат
+                  CERT_NAME=$(basename "${CERT_PATH}" 2>/dev/null || echo "")
+                  if [ -n "${CERT_NAME}" ]; then
+                    # Ищем сертификат в разных местах
+                    for SEARCH_PATH in "/var/jenkins_home/.minikube-host/" "/var/jenkins_home/.minikube-host/profiles/${MINIKUBE_PROFILE}/"; do
+                      if [ -f "${SEARCH_PATH}${CERT_NAME}" ]; then
+                        echo "✅ Найден сертификат: ${SEARCH_PATH}${CERT_NAME}"
+                        # Обновляем путь в конфиге
+                        USER_NAME="$(kubectl config view --minify -o jsonpath='{.users[0].name}' 2>/dev/null || true)"
+                        if [ -n "${USER_NAME}" ]; then
+                          kubectl config set-credentials "${USER_NAME}" --client-certificate="${SEARCH_PATH}${CERT_NAME}" --embed-certs=true
+                        fi
+                        break
+                      fi
+                    done
+                  fi
+                else
+                  echo "✅ Сертификат найден: ${CERT_PATH}"
                 fi
               fi
 
-              # Создание финального конфига
-              kubectl config view --flatten > "${WORKSPACE}/.kubeconfig-run"
+              # Создание финального конфига с встроенными сертификатами
+              echo "Создание финального kubeconfig с встроенными сертификатами..."
+              kubectl config view --flatten --embed-certs=true > "${WORKSPACE}/.kubeconfig-run"
               export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
               
               echo "✅ Kubeconfig подготовлен"
