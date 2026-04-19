@@ -108,14 +108,27 @@ pipeline {
               # Исправление путей в kubeconfig для работы в контейнере
               KCFG_FIX="${WORKSPACE}/.kubeconfig-pathfix"
               
-              sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
-                  -e 's#C:\\\\Users\\\\[^\\\\]*\\\\[.]minikube#/var/jenkins_home/.minikube-host#g' \
-                  -e 's#C:/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
-                  "${KUBECONFIG}" > "${KCFG_FIX}"
+              # Многоэтапная замена путей
+              cat "${KUBECONFIG}" | \
+                sed -e 's#C:\\\\Users\\\\[^\\\\]*\\\\[.]minikube#/var/jenkins_home/.minikube-host#g' \
+                    -e 's#C:/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
+                    -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' \
+                    -e 's#\\\\#/#g' \
+                    -e 's#\\#/#g' \
+                    -e 's#C:/#/#g' \
+                    -e 's#//#/#g' \
+                > "${KCFG_FIX}"
+              
+              echo "=== Оригинальный kubeconfig (первые 20 строк) ==="
+              head -20 "${KUBECONFIG}"
+              echo ""
+              echo "=== Исправленный kubeconfig (первые 20 строк) ==="
+              head -20 "${KCFG_FIX}"
               
               export KUBECONFIG="${KCFG_FIX}"
 
               # Установка контекста
+              echo "Переключение на контекст: ${MINIKUBE_PROFILE}"
               kubectl config use-context "${MINIKUBE_PROFILE}" || {
                 echo "Не удалось переключиться на контекст ${MINIKUBE_PROFILE}"
                 echo "Доступные контексты:"
@@ -133,6 +146,20 @@ pipeline {
                 kubectl config set-cluster "${CLUSTER_NAME}" \
                   --server="https://host.docker.internal:${PORT}" \
                   --insecure-skip-tls-verify=true >/dev/null
+              fi
+
+              # Дополнительная проверка и исправление путей к сертификатам
+              echo "Проверка путей к сертификатам..."
+              CERT_PATH="$(kubectl config view --minify -o jsonpath='{.users[0].user.client-certificate}' 2>/dev/null || true)"
+              if [ -n "${CERT_PATH}" ] && [ ! -f "${CERT_PATH}" ]; then
+                echo "⚠️  Путь к сертификату не существует: ${CERT_PATH}"
+                # Попытка найти сертификат в minikube-host
+                CERT_NAME=$(basename "${CERT_PATH}")
+                if [ -f "/var/jenkins_home/.minikube-host/${CERT_NAME}" ]; then
+                  echo "✅ Найден сертификат: /var/jenkins_home/.minikube-host/${CERT_NAME}"
+                elif [ -f "/var/jenkins_home/.minikube-host/profiles/${MINIKUBE_PROFILE}/${CERT_NAME}" ]; then
+                  echo "✅ Найден сертификат в профиле: /var/jenkins_home/.minikube-host/profiles/${MINIKUBE_PROFILE}/${CERT_NAME}"
+                fi
               fi
 
               # Создание финального конфига
