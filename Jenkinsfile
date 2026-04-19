@@ -8,161 +8,196 @@ pipeline {
     disableConcurrentBuilds()
   }
 
+  parameters {
+    booleanParam(
+      name: 'SKIP_K8S_DEPLOY',
+      defaultValue: false,
+      description: 'Только JAR и Docker-образ, без kubectl.'
+    )
+    string(
+      name: 'MINIKUBE_PROFILE',
+      defaultValue: 'minikube',
+      description: 'Профиль minikube (как --name у kind). Драйвер на Mac: docker.'
+    )
+  }
+
   environment {
-    TF_DIR = 'infra/terraform'
-    ANSIBLE_DIR = 'infra/ansible'
-    APP_DIR = '.'
+    PROJECT_DIR = '.'
     JENKINS_CONTAINER = 'jenkins-lab'
+    K8S_DIR = 'k8s'
+    NAMESPACE = 'task-manager-bot'
+    IMAGE_NAME = 'task-manager-bot:latest'
+    MINIKUBE_HOME = '/var/jenkins_home/.minikube-host'
   }
 
   stages {
     stage('Checkout') {
       steps {
-        cleanWs(
-          deleteDirs: true,
-          disableDeferredWipeout: true
-        )
+        cleanWs(deleteDirs: true, disableDeferredWipeout: true)
         checkout scm
       }
     }
 
-    stage('Build fat-jar (JDK 23)') {
+    stage('Build JAR') {
       steps {
         sh '''
           set -euo pipefail
+          export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
           docker run --rm \
             --volumes-from "${JENKINS_CONTAINER}" \
-            -w "${WORKSPACE}/${APP_DIR}" \
+            -w "${WORKSPACE}/${PROJECT_DIR}" \
             maven:3.9.9-eclipse-temurin-23 \
             mvn -B -DskipTests package
         '''
       }
       post {
         success {
-          archiveArtifacts artifacts: "target/*.jar", fingerprint: true
+          archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
         }
       }
     }
 
-    stage('Terraform init/apply') {
+    stage('Docker build & load to minikube') {
       steps {
-        withCredentials([
-          string(credentialsId: 'yc-iam-token', variable: 'YC_TOKEN'),
-          string(credentialsId: 'dir_cloud', variable: 'YC_CLOUD_ID'),
-          string(credentialsId: 'my_dir', variable: 'YC_FOLDER_ID'),
-          string(credentialsId: 'ssh-public-key', variable: 'YC_SSH_PUBLIC_KEY'),
-          string(credentialsId: 'yc_subnet', variable: 'YC_SUBNET_ID'),
-          string(credentialsId: 'yc_security_group', variable: 'YC_SECURITY_GROUP_ID')
-        ]) {
-          sh '''
-            set -euo pipefail
-            export YC_TOKEN YC_CLOUD_ID YC_FOLDER_ID
+        sh """
+          set -euo pipefail
+          export PATH="/usr/local/bin:/usr/bin:/bin:\${PATH}"
+          docker build --platform linux/arm64 -t ${env.IMAGE_NAME} .
 
-            cd "${TF_DIR}"
-            terraform init -input=false
-            terraform apply -auto-approve -input=false \
-              -var "cloud_id=${YC_CLOUD_ID}" \
-              -var "folder_id=${YC_FOLDER_ID}" \
-              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}" \
-              -var "subnet_id=${YC_SUBNET_ID}" \
-              -var "security_group_id=${YC_SECURITY_GROUP_ID}"
-          '''
-        }
+          PROFILE='${params.MINIKUBE_PROFILE}'
+          MNODE=\$(docker ps --filter "label=name.minikube.sigs.k8s.io=\${PROFILE}" --format '{{.Names}}' | head -n1)
+          if [ -z "\${MNODE}" ]; then
+            MNODE=\$(docker ps --format '{{.Names}}' | grep -E "^\${PROFILE}\$|^\${PROFILE}-" | head -n1)
+          fi
+          if [ -z "\${MNODE}" ]; then
+            echo "Не найден контейнер узла minikube (профиль \${PROFILE}). На Mac: minikube status" >&2
+            docker ps -a --format 'table {{.Names}}\\t{{.Image}}' | head -25 >&2 || true
+            exit 1
+          fi
+          echo "Узел minikube (контейнер): \${MNODE}"
+          docker save ${env.IMAGE_NAME} | docker exec -i "\${MNODE}" docker load
+        """
       }
     }
 
-    stage('Ansible provision & deploy') {
+    stage('Deploy to K8s') {
+      when {
+        expression { return !params.SKIP_K8S_DEPLOY }
+      }
       steps {
-        withCredentials([
-          string(credentialsId: 'vault_dev_root_token', variable: 'VAULT_DEV_ROOT_TOKEN_ID'),
-          string(credentialsId: 'mongodb_root_username', variable: 'MONGO_INITDB_ROOT_USERNAME'),
-          string(credentialsId: 'mongodb_root_password', variable: 'MONGO_INITDB_ROOT_PASSWORD'),
-          file(credentialsId: 'vault_init_sh', variable: 'CRED_VAULT_INIT_SH'),
-          sshUserPrivateKey(credentialsId: 'ssh-private-key', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')
-        ]) {
-          sh '''
-            set -euo pipefail
+        script {
+          echo '📡 kubectl + манифесты...'
+          withEnv(["MINIKUBE_PROFILE=${params.MINIKUBE_PROFILE}"]) {
+            sh '''
+              set -euo pipefail
+              export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
+              command -v kubectl >/dev/null 2>&1 || { echo "Пересоберите образ Jenkins (cloud_study/Dockerfile)."; exit 1; }
 
-            mkdir -p "${ANSIBLE_DIR}/files"
-            cp "${CRED_VAULT_INIT_SH}" "${ANSIBLE_DIR}/files/vault-init.sh"
-            chmod 0755 "${ANSIBLE_DIR}/files/vault-init.sh"
-            printf '%s\n' "${VAULT_DEV_ROOT_TOKEN_ID}" > "${ANSIBLE_DIR}/files/vault_root_token.txt"
-            chmod 0600 "${ANSIBLE_DIR}/files/vault_root_token.txt"
-
-            cd "${TF_DIR}"
-            VM_IP="$(terraform output -raw vm_external_ip)"
-            cd -
-
-            mkdir -p "${ANSIBLE_DIR}"
-            {
-              echo '[app]'
-              echo "${VM_IP} ansible_user=${SSH_USER} ansible_ssh_private_key_file=${SSH_KEY_FILE}"
-            } > "${ANSIBLE_DIR}/inventory.ini"
-
-            echo "Waiting for sshd on ${VM_IP} (fresh VM often needs 30–120s)..."
-            SSH_PROBE_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            READY=0
-            for i in $(seq 1 36); do
-              if ssh ${SSH_PROBE_OPTS} -i "${SSH_KEY_FILE}" "${SSH_USER}@${VM_IP}" "exit 0" 2>/dev/null; then
-                READY=1
-                echo "SSH is up (attempt ${i})."
-                break
+              if [ -n "${KUBECONFIG:-}" ] && [ -f "${KUBECONFIG}" ]; then
+                :
+              elif [ -f /var/jenkins_home/.kube-host/config ]; then
+                export KUBECONFIG=/var/jenkins_home/.kube-host/config
+              elif [ -f /var/jenkins_home/.kube/config ]; then
+                export KUBECONFIG=/var/jenkins_home/.kube/config
+              else
+                echo "Нет kubeconfig. Смонтируйте ~/.kube в docker-compose." >&2
+                exit 1
               fi
-              echo "SSH not ready yet (attempt ${i}/36), sleeping 10s..."
-              sleep 10
-            done
-            if [ "${READY}" != 1 ]; then
-              echo "SSH never became ready — check security group (ingress TCP 22) and cloud-init on the VM."
-              exit 1
-            fi
+              # В config с Mac абсолютные пути /Users/.../.minikube — в контейнере их нет; том ~/.minikube → .minikube-host
+              KCFG_FIX="${WORKSPACE}/.kubeconfig-pathfix"
+              sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' "${KUBECONFIG}" > "${KCFG_FIX}"
+              export KUBECONFIG="${KCFG_FIX}"
 
-            cd "${ANSIBLE_DIR}"
-            ansible-playbook -i inventory.ini playbook.yml \
-              -e "vault_dev_root_token_id=${VAULT_DEV_ROOT_TOKEN_ID}" \
-              -e "mongo_initdb_root_username=${MONGO_INITDB_ROOT_USERNAME}" \
-              -e "mongo_initdb_root_password=${MONGO_INITDB_ROOT_PASSWORD}"
-          '''
+              # Для minikube(docker driver) server часто https://127.0.0.1:<порт> — в контейнере это не API minikube.
+              # Имя кластера в kubeconfig не всегда совпадает с именем контекста, поэтому берём server через --minify.
+              kubectl config use-context "${MINIKUBE_PROFILE}"
+              CLUSTER_NAME="$(kubectl config view --minify -o jsonpath='{.clusters[0].name}' 2>/dev/null || true)"
+              SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+              if echo "${SERVER}" | grep -Eq '^https://127[.]0[.]0[.]1:[0-9]+$' && [ -n "${CLUSTER_NAME}" ]; then
+                PORT="${SERVER##*:}"
+                kubectl config set-cluster "${CLUSTER_NAME}" \
+                  --server="https://host.docker.internal:${PORT}" \
+                  --insecure-skip-tls-verify=true >/dev/null
+              fi
+
+              kubectl config view --flatten > "${WORKSPACE}/.kubeconfig-run"
+              export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
+            '''
+          }
+
+          sh """
+            set -euo pipefail
+            export PATH="/usr/local/bin:/usr/bin:/bin:\${PATH}"
+            export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
+            kubectl config use-context ${params.MINIKUBE_PROFILE}
+            kubectl cluster-info
+          """
+
+          withCredentials([
+            file(credentialsId: 'VAULT_INIT_SH', variable: 'CRED_VAULT_INIT_SH'),
+            string(credentialsId: 'VAULT_DEV_ROOT_TOKEN_ID', variable: 'VAULT_DEV_ROOT_TOKEN_ID'),
+            string(credentialsId: 'MONGO_INITDB_ROOT_USERNAME', variable: 'MONGO_INITDB_ROOT_USERNAME'),
+            string(credentialsId: 'MONGO_INITDB_ROOT_PASSWORD', variable: 'MONGO_INITDB_ROOT_PASSWORD')
+          ]) {
+            sh '''
+              set -euo pipefail
+              export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
+              export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
+
+              NS="${NAMESPACE}"
+              cp "${CRED_VAULT_INIT_SH}" "${WORKSPACE}/.vault-init-from-jenkins.sh"
+              chmod 0755 "${WORKSPACE}/.vault-init-from-jenkins.sh"
+
+              kubectl apply -f "${K8S_DIR}/00-namespace.yaml"
+              kubectl -n "${NS}" create secret generic mongo-creds \
+                --from-literal=username="${MONGO_INITDB_ROOT_USERNAME}" \
+                --from-literal=password="${MONGO_INITDB_ROOT_PASSWORD}" \
+                --dry-run=client -o yaml | kubectl apply -f -
+              kubectl -n "${NS}" create secret generic vault-root \
+                --from-literal=token="${VAULT_DEV_ROOT_TOKEN_ID}" \
+                --dry-run=client -o yaml | kubectl apply -f -
+              kubectl -n "${NS}" create configmap vault-init-script \
+                --from-file=vault-init.sh="${WORKSPACE}/.vault-init-from-jenkins.sh" \
+                --dry-run=client -o yaml | kubectl apply -f -
+
+              kubectl apply -f "${K8S_DIR}/10-mongodb.yaml" -f "${K8S_DIR}/20-vault.yaml"
+              kubectl -n "${NS}" rollout status deployment/mongodb --timeout=180s
+              kubectl -n "${NS}" rollout status deployment/vault --timeout=180s
+
+              kubectl -n "${NS}" delete job vault-init --ignore-not-found
+              kubectl apply -f "${K8S_DIR}/30-job-vault-init.yaml"
+              kubectl -n "${NS}" wait --for=condition=complete job/vault-init --timeout=300s
+
+              kubectl apply -f "${K8S_DIR}/40-deployment-app.yaml" -f "${K8S_DIR}/50-service-app.yaml"
+              kubectl -n "${NS}" rollout restart deployment/task-manager-bot
+              kubectl -n "${NS}" rollout status deployment/task-manager-bot --timeout=400s
+            '''
+          }
         }
+      }
+    }
+
+    stage('Check Status') {
+      when {
+        expression { return !params.SKIP_K8S_DEPLOY }
+      }
+      steps {
+        sh '''
+          set -euo pipefail
+          export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
+          export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
+          echo "📜 Pods:"
+          kubectl get pods -n "${NAMESPACE}" -o wide
+          echo "🌐 Services:"
+          kubectl get svc -n "${NAMESPACE}"
+        '''
       }
     }
   }
 
   post {
     always {
-      script {
-        withCredentials([
-          string(credentialsId: 'yc-iam-token', variable: 'YC_TOKEN'),
-          string(credentialsId: 'dir_cloud', variable: 'YC_CLOUD_ID'),
-          string(credentialsId: 'my_dir', variable: 'YC_FOLDER_ID'),
-          string(credentialsId: 'ssh-public-key', variable: 'YC_SSH_PUBLIC_KEY'),
-          string(credentialsId: 'yc_subnet', variable: 'YC_SUBNET_ID'),
-          string(credentialsId: 'yc_security_group', variable: 'YC_SECURITY_GROUP_ID')
-        ]) {
-          sh '''
-            set +e
-            echo "=== Terraform destroy (очистка инфраструктуры, всегда в конце) ==="
-            if [ ! -d "${TF_DIR}" ]; then
-              echo "Каталог ${TF_DIR} отсутствует — пропуск destroy"
-              exit 0
-            fi
-            cd "${TF_DIR}"
-            if [ ! -f terraform.tfstate ] && [ ! -f .terraform/terraform.tfstate ]; then
-              echo "Нет terraform state — пропуск destroy"
-              exit 0
-            fi
-            export YC_TOKEN YC_CLOUD_ID YC_FOLDER_ID
-            terraform init -input=false
-            terraform destroy -auto-approve -input=false \
-              -var "cloud_id=${YC_CLOUD_ID}" \
-              -var "folder_id=${YC_FOLDER_ID}" \
-              -var "ssh_public_key=${YC_SSH_PUBLIC_KEY}" \
-              -var "subnet_id=${YC_SUBNET_ID}" \
-              -var "security_group_id=${YC_SECURITY_GROUP_ID}" || true
-            echo "Terraform destroy завершён (код выше мог быть ненулевым)"
-            exit 0
-          '''
-        }
-      }
+      cleanWs()
     }
   }
 }
