@@ -87,7 +87,7 @@ pipeline {
       steps {
         script {
           echo '📡 kubectl + манифесты...'
-          sh '''
+          sh """
             set -euo pipefail
             export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
             command -v kubectl >/dev/null 2>&1 || { echo "Пересоберите образ Jenkins (cloud_study/Dockerfile)."; exit 1; }
@@ -106,9 +106,21 @@ pipeline {
             KCFG_FIX="${WORKSPACE}/.kubeconfig-pathfix"
             sed -e 's#/Users/[^/]*/[.]minikube#/var/jenkins_home/.minikube-host#g' "${KUBECONFIG}" > "${KCFG_FIX}"
             export KUBECONFIG="${KCFG_FIX}"
+
+            # Для minikube(docker driver) kubeconfig часто содержит server https://127.0.0.1:<порт>.
+            # Внутри контейнера Jenkins это "сам контейнер", поэтому переписываем на хост.
+            CLUSTER_NAME='${params.MINIKUBE_PROFILE}'
+            SERVER="$(kubectl config view -o jsonpath='{.clusters[?(@.name=="'"${CLUSTER_NAME}"'")].cluster.server}' 2>/dev/null || true)"
+            if echo "${SERVER}" | grep -Eq '^https://127[.]0[.]0[.]1:[0-9]+$'; then
+              PORT="${SERVER##*:}"
+              kubectl config set-cluster "${CLUSTER_NAME}" \
+                --server="https://host.docker.internal:${PORT}" \
+                --insecure-skip-tls-verify=true >/dev/null
+            fi
+
             kubectl config view --flatten > "${WORKSPACE}/.kubeconfig-run"
             export KUBECONFIG="${WORKSPACE}/.kubeconfig-run"
-          '''
+          """
 
           sh """
             set -euo pipefail
