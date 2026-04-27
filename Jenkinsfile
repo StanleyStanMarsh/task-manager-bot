@@ -71,8 +71,8 @@ pipeline {
         JENKINS_CONTAINER = 'jenkins-lab'
         PROJECT_SUBDIR = ''
 
-        // Jenkins → Credentials → Secret text: вставьте вывод openstack rc (построчно export OS_...=...)
-        OS_CREDENTIALS_ID = 'rc-credentials-task-manager-bot'
+        // Secret text с openstack rc — ID своего credential; пусто = только clouds.yaml/OS_* на агенте
+        OS_CREDENTIALS_ID = ''
     }
 
     stages {
