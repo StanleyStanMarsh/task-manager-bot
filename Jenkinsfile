@@ -1,8 +1,46 @@
 /**
- * Сборка Maven в Docker как в рабочем пайплайне: cleanWs + один checkout, --volumes-from контейнера Jenkins.
- * Путь к pom.xml ищется через find (не fileExists — избегаем «грязного» workspace).
- * JENKINS_CONTAINER: имя контейнера Jenkins (у вас jenkins-lab). Пусто — fallback: -v \$WORKSPACE:\$WORKSPACE
+ * Сборка Maven в Docker (volumes-from / bind-mount). OpenStack: credential Secret text с содержимым openrc
+ * (как у Арсения: OS_CREDENTIALS_ID → loadSecretsIntoEnv). Создайте в Jenkins credential типа Secret text,
+ * вставьте полный файл openstack.rc одной строкой или многострочный текст — парсер построчный.
  */
+def loadSecretsIntoEnv(String credentialId) {
+    if (!credentialId?.trim()) {
+        echo 'OS_CREDENTIALS_ID пуст — используются clouds.yaml / OS_* уже на агенте.'
+        return
+    }
+    withCredentials([string(credentialsId: credentialId, variable: 'SECRET_BLOB')]) {
+        def content = sh(script: '''#!/bin/bash
+printf '%s' "${SECRET_BLOB}"
+''', returnStdout: true)
+        content.split(/\r?\n/).each { rawLine ->
+            try {
+                def line = rawLine.trim()
+                if (!line || line.startsWith('#')) {
+                    return
+                }
+                if (line.startsWith('export ')) {
+                    line = line.substring(7).trim()
+                }
+                def eq = line.indexOf('=')
+                if (eq <= 0) {
+                    return
+                }
+                def key = line.substring(0, eq).trim()
+                def value = line.substring(eq + 1).trim()
+                while (value.length() >= 2 &&
+                    ((value.startsWith('"') && value.endsWith('"')) ||
+                        (value.startsWith("'") && value.endsWith("'")))) {
+                    value = value.substring(1, value.length() - 1)
+                }
+                env."${key}" = value
+                echo "Loaded OS env key: ${key}"
+            } catch (Exception e) {
+                echo "Skip line (parse): ${e.message}"
+            }
+        }
+    }
+}
+
 pipeline {
     agent none
 
@@ -14,7 +52,7 @@ pipeline {
 
     environment {
         BUILD_AGENT_LABEL = 'built-in'
-        HEAT_AGENT_LABEL = 'openstack-cli'
+        HEAT_AGENT_LABEL = 'built-in'
         DEPLOY_AGENT_LABEL = 'built-in'
 
         HEAT_STACK_NAME = 'task-manager-bot-stack'
@@ -30,11 +68,11 @@ pipeline {
         ENV_CREDENTIAL_ID = 'task-manager-bot-env'
 
         MAVEN_DOCKER_IMAGE = 'maven:3.9.9-eclipse-temurin-23'
-        // Имя контейнера Jenkins — как в рабочем пайплайне (docker inspect …). Пусто = только bind-mount.
         JENKINS_CONTAINER = 'jenkins-lab'
-
-        // Не пусто — принудительно этот подкаталог (относительно workspace), иначе ищем pom.xml через find
         PROJECT_SUBDIR = ''
+
+        // Jenkins → Credentials → Secret text: вставьте вывод openstack rc (построчно export OS_...=...)
+        OS_CREDENTIALS_ID = 'rc-credentials-task-manager-bot'
     }
 
     stages {
@@ -114,6 +152,13 @@ pipeline {
             agent { label "${env.HEAT_AGENT_LABEL}" }
             steps {
                 script {
+                    loadSecretsIntoEnv(env.OS_CREDENTIALS_ID)
+                    sh '''
+                        set +x
+                        openstack token issue -f yaml >/dev/null
+                        echo "OpenStack auth OK"
+                    '''
+
                     unstash 'project-meta'
                     def sub = readFile('project-subdir.txt').trim()
 
@@ -183,7 +228,7 @@ pipeline {
 
     post {
         failure {
-            echo 'cleanWs+checkout, JENKINS_CONTAINER=jenkins-lab, find pom.xml, OpenStack, ssh-deploy-key, ENV credential.'
+            echo 'Maven/Docker, OS_CREDENTIALS_ID (Secret text openrc), ssh-deploy-key, task-manager-bot-env.'
         }
     }
 }
