@@ -1,7 +1,7 @@
 /**
- * Секреты из .env.example: создайте в Jenkins учётные данные типа «Secret file» (полный текст .env)
- * с заполненными TELEGRAM_*, SUPERADMIN_* и т.д. ID по умолчанию — task-manager-bot-env (см. ENV_CREDENTIAL_ID).
- * При деплое файл кладётся на сервер как ${DEPLOY_REMOTE_DIR}/.env.
+ * Один запуск без параметров: правьте значения в environment {} под свой Jenkins/облако.
+ * Секреты .env: Jenkins credential «Secret file», ID = ENV_CREDENTIAL_ID.
+ * IP ВМ для деплоя берётся из вывода Heat после этапа «Инфраструктура».
  */
 pipeline {
     agent none
@@ -11,118 +11,119 @@ pipeline {
         disableConcurrentBuilds()
     }
 
-    parameters {
-        string(name: 'BUILD_AGENT_LABEL', defaultValue: 'built-in', description: 'Агент для Maven')
-        string(name: 'HEAT_AGENT_LABEL', defaultValue: 'openstack-cli', description: 'Агент с openstack CLI')
-        string(name: 'DEPLOY_AGENT_LABEL', defaultValue: 'built-in', description: 'Агент для scp/ssh к ВМ')
+    environment {
+        BUILD_AGENT_LABEL = 'built-in'
+        HEAT_AGENT_LABEL = 'openstack-cli'
+        DEPLOY_AGENT_LABEL = 'built-in'
 
-        choice(name: 'HEAT_ACTION', choices: ['create', 'update'], description: 'create — новый стек, update — обновление')
-        string(name: 'HEAT_STACK_NAME', defaultValue: 'task-manager-bot-stack', description: 'Имя стека')
-        string(name: 'HEAT_TEMPLATE_PATH', defaultValue: 'infra/template.yaml', description: 'Шаблон Heat от корня репо')
-        string(name: 'HEAT_PARAMETER_IMAGE', defaultValue: 'ununtu-22.04', description: 'image_id')
-        string(name: 'HEAT_PARAMETER_FLAVOR', defaultValue: 'm1.small', description: 'flavor_id')
-        string(name: 'HEAT_PARAMETER_KEY', defaultValue: 'astafye-key', description: 'key_name')
-        string(name: 'HEAT_PARAMETER_SUBNET', defaultValue: '87af7ae7-714d-4472-b19a-7a4ec8505165', description: 'existing_subnet_id')
+        HEAT_STACK_NAME = 'task-manager-bot-stack'
+        HEAT_TEMPLATE_PATH = 'infra/template.yaml'
+        HEAT_PARAMETER_IMAGE = 'ununtu-22.04'
+        HEAT_PARAMETER_FLAVOR = 'm1.small'
+        HEAT_PARAMETER_KEY = 'astafye-key'
+        HEAT_PARAMETER_SUBNET = '87af7ae7-714d-4472-b19a-7a4ec8505165'
 
-        string(name: 'DEPLOY_HOST', defaultValue: '', description: 'IP ВМ (stack output server_private_ip)')
-        string(name: 'DEPLOY_USER', defaultValue: 'ubuntu', description: 'SSH user')
-        string(name: 'DEPLOY_REMOTE_DIR', defaultValue: '/opt/task-manager-bot', description: 'Каталог на сервере')
-        text(
-            name: 'DEPLOY_RESTART_CMD',
-            defaultValue: 'sudo docker compose -f /opt/task-manager-bot/docker-compose.yml restart app || true',
-            description: 'Команда на ВМ после копирования JAR'
-        )
-        booleanParam(
-            name: 'RUN_ENVIRONMENT_SETUP',
-            defaultValue: false,
-            description: 'Выполнить infra/environment.sh на ВМ под sudo (Docker/Java/том Mongo и т.д.). Обычно один раз после первого Heat; повторный запуск долгий и не всегда нужен.'
-        )
-        booleanParam(
-            name: 'COPY_ENV_TO_SERVER',
-            defaultValue: true,
-            description: 'Скопировать Secret file (.env) на ВМ перед перезапуском приложения'
-        )
-        string(
-            name: 'ENV_CREDENTIAL_ID',
-            defaultValue: 'task-manager-bot-env',
-            description: 'ID Jenkins credential типа Secret file с содержимым .env'
-        )
+        DEPLOY_USER = 'ubuntu'
+        DEPLOY_REMOTE_DIR = '/opt/task-manager-bot'
+        DEPLOY_RESTART_CMD = 'sudo docker compose -f /opt/task-manager-bot/docker-compose.yml restart app || true'
+        ENV_CREDENTIAL_ID = 'task-manager-bot-env'
+
+        MAVEN_DOCKER_IMAGE = 'maven:3.9.9-eclipse-temurin-23'
+        // Пусто: docker run с -v $WORKSPACE. Или имя контейнера для --volumes-from.
+        JENKINS_CONTAINER = ''
     }
 
     stages {
         stage('Сборка') {
-            agent { label "${params.BUILD_AGENT_LABEL}" }
+            agent { label "${env.BUILD_AGENT_LABEL}" }
             steps {
                 checkout scm
-                sh 'mvn -B -ntp clean package -DskipTests'
-                archiveArtifacts artifacts: 'target/task-manager-bot-*.jar', fingerprint: true, onlyIfSuccessful: true
-                stash name: 'app-jar', includes: 'target/task-manager-bot-*.jar'
-                stash name: 'heat-infra', includes: 'infra/**'
+                script {
+                    def ws = env.WORKSPACE
+                    def volFrom = env.JENKINS_CONTAINER?.trim()
+                    def image = env.MAVEN_DOCKER_IMAGE
+                    if (volFrom) {
+                        sh """
+                            set -euo pipefail
+                            docker run --rm \\
+                              --volumes-from "${volFrom}" \\
+                              -w "${ws}" \\
+                              ${image} \\
+                              mvn -B -ntp clean package -DskipTests
+                        """
+                    } else {
+                        sh """
+                            set -euo pipefail
+                            docker run --rm \\
+                              -v "${ws}:${ws}" \\
+                              -w "${ws}" \\
+                              ${image} \\
+                              mvn -B -ntp clean package -DskipTests
+                        """
+                    }
+                    archiveArtifacts artifacts: 'target/task-manager-bot-*.jar', fingerprint: true, onlyIfSuccessful: true
+                    stash name: 'app-jar', includes: 'target/task-manager-bot-*.jar'
+                    stash name: 'heat-infra', includes: 'infra/**'
+                }
             }
         }
 
         stage('Инфраструктура') {
-            agent { label "${params.HEAT_AGENT_LABEL}" }
+            agent { label "${env.HEAT_AGENT_LABEL}" }
             steps {
-                dir('infra-work') {
-                    deleteDir()
-                    unstash 'heat-infra'
-                    script {
-                        def tpl = params.HEAT_TEMPLATE_PATH
+                script {
+                    def stack = env.HEAT_STACK_NAME
+                    def ip
+                    dir('infra-work') {
+                        deleteDir()
+                        unstash 'heat-infra'
+                        def tpl = env.HEAT_TEMPLATE_PATH
                         def commonArgs = "-t ${tpl} " +
-                            "--parameter image_id=${params.HEAT_PARAMETER_IMAGE} " +
-                            "--parameter flavor_id=${params.HEAT_PARAMETER_FLAVOR} " +
-                            "--parameter key_name=${params.HEAT_PARAMETER_KEY} " +
-                            "--parameter existing_subnet_id=${params.HEAT_PARAMETER_SUBNET} " +
-                            "${params.HEAT_STACK_NAME}"
-                        def cmd = params.HEAT_ACTION == 'create'
-                            ? "openstack stack create ${commonArgs} --wait"
-                            : "openstack stack update ${commonArgs} --wait"
-                        // withCredentials([file(credentialsId: 'openstack-clouds', variable: 'OS_CLIENT_CONFIG_FILE')]) { sh cmd }
-                        sh cmd
-                        sh "openstack stack show ${params.HEAT_STACK_NAME} -c stack_status -f value"
+                            "--parameter image_id=${env.HEAT_PARAMETER_IMAGE} " +
+                            "--parameter flavor_id=${env.HEAT_PARAMETER_FLAVOR} " +
+                            "--parameter key_name=${env.HEAT_PARAMETER_KEY} " +
+                            "--parameter existing_subnet_id=${env.HEAT_PARAMETER_SUBNET} " +
+                            "${stack}"
+                        sh """
+                            set -euo pipefail
+                            if openstack stack show ${stack} >/dev/null 2>&1; then
+                              openstack stack update ${commonArgs} --wait
+                            else
+                              openstack stack create ${commonArgs} --wait
+                            fi
+                            openstack stack show ${stack} -c stack_status -f value
+                        """
+                        ip = sh(
+                            script: "openstack stack output show ${stack} server_private_ip -f value -c output_value",
+                            returnStdout: true
+                        ).trim()
                     }
+                    writeFile file: 'deploy-host.txt', text: ip
+                    stash name: 'deploy-host', includes: 'deploy-host.txt'
                 }
             }
         }
 
         stage('Деплой') {
-            agent { label "${params.DEPLOY_AGENT_LABEL}" }
+            agent { label "${env.DEPLOY_AGENT_LABEL}" }
             steps {
                 script {
-                    def host = params.DEPLOY_HOST?.trim()
-                    if (!host) {
-                        error('Задайте параметр DEPLOY_HOST')
-                    }
                     unstash 'app-jar'
                     unstash 'heat-infra'
+                    unstash 'deploy-host'
+                    def host = readFile('deploy-host.txt').trim()
+                    if (!host) {
+                        error('Пустой IP из Heat (server_private_ip)')
+                    }
                     def jarFile = sh(script: 'ls target/task-manager-bot-*.jar | head -1', returnStdout: true).trim()
 
-                    if (params.COPY_ENV_TO_SERVER) {
-                        withCredentials([file(credentialsId: params.ENV_CREDENTIAL_ID, variable: 'BOT_ENV_FILE')]) {
-                            sshagent(['ssh-deploy-key']) {
-                                sh """
-                                    set -e
-                                    if [ "${params.RUN_ENVIRONMENT_SETUP}" = "true" ]; then
-                                      scp -o StrictHostKeyChecking=no infra/environment.sh ${params.DEPLOY_USER}@${host}:/tmp/environment-setup.sh
-                                      ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} 'sudo bash /tmp/environment-setup.sh'
-                                    fi
-                                    scp -o StrictHostKeyChecking=no \$BOT_ENV_FILE ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/.env
-                                    scp -o StrictHostKeyChecking=no ${jarFile} ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/task-manager-bot.jar
-                                    ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} '${params.DEPLOY_RESTART_CMD}'
-                                """
-                            }
-                        }
-                    } else {
+                    withCredentials([file(credentialsId: env.ENV_CREDENTIAL_ID, variable: 'BOT_ENV_FILE')]) {
                         sshagent(['ssh-deploy-key']) {
                             sh """
                                 set -e
-                                if [ "${params.RUN_ENVIRONMENT_SETUP}" = "true" ]; then
-                                  scp -o StrictHostKeyChecking=no infra/environment.sh ${params.DEPLOY_USER}@${host}:/tmp/environment-setup.sh
-                                  ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} 'sudo bash /tmp/environment-setup.sh'
-                                fi
-                                scp -o StrictHostKeyChecking=no ${jarFile} ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/task-manager-bot.jar
-                                ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} '${params.DEPLOY_RESTART_CMD}'
+                                scp -o StrictHostKeyChecking=no \$BOT_ENV_FILE ${env.DEPLOY_USER}@${host}:${env.DEPLOY_REMOTE_DIR}/.env
+                                scp -o StrictHostKeyChecking=no ${jarFile} ${env.DEPLOY_USER}@${host}:${env.DEPLOY_REMOTE_DIR}/task-manager-bot.jar
+                                ssh -o StrictHostKeyChecking=no ${env.DEPLOY_USER}@${host} '${env.DEPLOY_RESTART_CMD}'
                             """
                         }
                     }
@@ -133,7 +134,7 @@ pipeline {
 
     post {
         failure {
-            echo 'Проверьте агенты, OpenStack, SSH ssh-deploy-key, DEPLOY_HOST, Secret file ENV_CREDENTIAL_ID.'
+            echo 'Проверьте Docker, OpenStack, SSH credential ssh-deploy-key, Secret file ENV_CREDENTIAL_ID.'
         }
     }
 }
