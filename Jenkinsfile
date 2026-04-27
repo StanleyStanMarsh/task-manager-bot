@@ -1,13 +1,14 @@
 /**
- * Один запуск без параметров: правьте значения в environment {}.
- * Если pom.xml не в корне workspace (монорепо), задайте PROJECT_SUBDIR, например task-manager-bot,
- * или оставьте пустым — поиск в корне и в task-manager-bot/.
+ * Сборка Maven в Docker как в рабочем пайплайне: cleanWs + один checkout, --volumes-from контейнера Jenkins.
+ * Путь к pom.xml ищется через find (не fileExists — избегаем «грязного» workspace).
+ * JENKINS_CONTAINER: имя контейнера Jenkins (у вас jenkins-lab). Пусто — fallback: -v \$WORKSPACE:\$WORKSPACE
  */
 pipeline {
     agent none
 
     options {
         timestamps()
+        skipDefaultCheckout(true)
         disableConcurrentBuilds()
     }
 
@@ -29,9 +30,10 @@ pipeline {
         ENV_CREDENTIAL_ID = 'task-manager-bot-env'
 
         MAVEN_DOCKER_IMAGE = 'maven:3.9.9-eclipse-temurin-23'
-        JENKINS_CONTAINER = ''
+        // Имя контейнера Jenkins — как в рабочем пайплайне (docker inspect …). Пусто = только bind-mount.
+        JENKINS_CONTAINER = 'jenkins-lab'
 
-        // Пусто — авто (корень или task-manager-bot/). Иначе подкаталог относительно workspace, где лежит pom.xml
+        // Не пусто — принудительно этот подкаталог (относительно workspace), иначе ищем pom.xml через find
         PROJECT_SUBDIR = ''
     }
 
@@ -39,25 +41,35 @@ pipeline {
         stage('Сборка') {
             agent { label "${env.BUILD_AGENT_LABEL}" }
             steps {
-                checkout scm
                 script {
-                    def ws = env.WORKSPACE
+                    cleanWs(deleteDirs: true, disableDeferredWipeout: true)
+                    checkout scm
+
                     def manual = env.PROJECT_SUBDIR?.trim()
-                    def sub
                     if (manual) {
-                        sub = manual
-                        if (!fileExists("${sub}/pom.xml")) {
-                            error("Нет pom.xml в ${sub}/ — проверьте PROJECT_SUBDIR в Jenkinsfile.")
+                        writeFile file: 'project-subdir.txt', text: manual
+                        if (!fileExists("${manual}/pom.xml")) {
+                            error("Нет ${manual}/pom.xml — проверьте PROJECT_SUBDIR.")
                         }
-                    } else if (fileExists('pom.xml')) {
-                        sub = ''
-                    } else if (fileExists('task-manager-bot/pom.xml')) {
-                        sub = 'task-manager-bot'
                     } else {
-                        error('Не найден pom.xml в корне workspace и в task-manager-bot/. Укажите PROJECT_SUBDIR в Jenkinsfile (environment).')
+                        sh '''
+                            set -euo pipefail
+                            cd "${WORKSPACE}"
+                            POM=$(find . -maxdepth 10 -type f -name pom.xml ! -path '*/target/*' ! -path '*/.git/*' | head -1)
+                            if [ -z "${POM}" ]; then
+                              echo "pom.xml не найден. Содержимое workspace:" >&2
+                              find . -maxdepth 3 -type f -o -type d | head -80
+                              exit 1
+                            fi
+                            REL="$(dirname "${POM}")"
+                            REL="${REL#./}"
+                            printf '%s' "${REL}" > "${WORKSPACE}/project-subdir.txt"
+                            echo "Используется каталог Maven: ${WORKSPACE}/${REL:-.}"
+                        '''
                     }
 
-                    def workDir = sub ? "${ws}/${sub}" : ws
+                    def sub = readFile('project-subdir.txt').trim()
+                    def workDir = sub ? "${env.WORKSPACE}/${sub}" : env.WORKSPACE
                     def volFrom = env.JENKINS_CONTAINER?.trim()
                     def image = env.MAVEN_DOCKER_IMAGE
 
@@ -74,16 +86,14 @@ pipeline {
                         sh """
                             set -euo pipefail
                             docker run --rm \\
-                              -v "${ws}:${ws}" \\
+                              -v "${env.WORKSPACE}:${env.WORKSPACE}" \\
                               -w "${workDir}" \\
                               ${image} \\
                               mvn -B -ntp clean package -DskipTests
                         """
                     }
 
-                    writeFile file: 'project-subdir.txt', text: sub
                     stash name: 'project-meta', includes: 'project-subdir.txt'
-
                     def jarGlob = sub ? "${sub}/target/task-manager-bot-*.jar" : 'target/task-manager-bot-*.jar'
                     def infraGlob = sub ? "${sub}/infra/**" : 'infra/**'
                     archiveArtifacts artifacts: jarGlob, fingerprint: true, onlyIfSuccessful: true
@@ -166,7 +176,7 @@ pipeline {
 
     post {
         failure {
-            echo 'Проверьте Docker, OpenStack, SSH ssh-deploy-key, Secret file ENV_CREDENTIAL_ID, PROJECT_SUBDIR.'
+            echo 'cleanWs+checkout, JENKINS_CONTAINER=jenkins-lab, find pom.xml, OpenStack, ssh-deploy-key, ENV credential.'
         }
     }
 }
