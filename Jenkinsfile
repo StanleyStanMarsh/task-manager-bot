@@ -1,3 +1,8 @@
+/**
+ * Секреты из .env.example: создайте в Jenkins учётные данные типа «Secret file» (полный текст .env)
+ * с заполненными TELEGRAM_*, SUPERADMIN_* и т.д. ID по умолчанию — task-manager-bot-env (см. ENV_CREDENTIAL_ID).
+ * При деплое файл кладётся на сервер как ${DEPLOY_REMOTE_DIR}/.env.
+ */
 pipeline {
     agent none
 
@@ -31,6 +36,16 @@ pipeline {
             name: 'RUN_ENVIRONMENT_SETUP',
             defaultValue: false,
             description: 'Выполнить infra/environment.sh на ВМ под sudo (Docker/Java/том Mongo и т.д.). Обычно один раз после первого Heat; повторный запуск долгий и не всегда нужен.'
+        )
+        booleanParam(
+            name: 'COPY_ENV_TO_SERVER',
+            defaultValue: true,
+            description: 'Скопировать Secret file (.env) на ВМ перед перезапуском приложения'
+        )
+        string(
+            name: 'ENV_CREDENTIAL_ID',
+            defaultValue: 'task-manager-bot-env',
+            description: 'ID Jenkins credential типа Secret file с содержимым .env'
         )
     }
 
@@ -82,16 +97,34 @@ pipeline {
                     unstash 'app-jar'
                     unstash 'heat-infra'
                     def jarFile = sh(script: 'ls target/task-manager-bot-*.jar | head -1', returnStdout: true).trim()
-                    sshagent(['ssh-deploy-key']) {
-                        sh """
-                            set -e
-                            if [ "${params.RUN_ENVIRONMENT_SETUP}" = "true" ]; then
-                              scp -o StrictHostKeyChecking=no infra/environment.sh ${params.DEPLOY_USER}@${host}:/tmp/environment-setup.sh
-                              ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} 'sudo bash /tmp/environment-setup.sh'
-                            fi
-                            scp -o StrictHostKeyChecking=no ${jarFile} ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/task-manager-bot.jar
-                            ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} '${params.DEPLOY_RESTART_CMD}'
-                        """
+
+                    if (params.COPY_ENV_TO_SERVER) {
+                        withCredentials([file(credentialsId: params.ENV_CREDENTIAL_ID, variable: 'BOT_ENV_FILE')]) {
+                            sshagent(['ssh-deploy-key']) {
+                                sh """
+                                    set -e
+                                    if [ "${params.RUN_ENVIRONMENT_SETUP}" = "true" ]; then
+                                      scp -o StrictHostKeyChecking=no infra/environment.sh ${params.DEPLOY_USER}@${host}:/tmp/environment-setup.sh
+                                      ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} 'sudo bash /tmp/environment-setup.sh'
+                                    fi
+                                    scp -o StrictHostKeyChecking=no \$BOT_ENV_FILE ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/.env
+                                    scp -o StrictHostKeyChecking=no ${jarFile} ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/task-manager-bot.jar
+                                    ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} '${params.DEPLOY_RESTART_CMD}'
+                                """
+                            }
+                        }
+                    } else {
+                        sshagent(['ssh-deploy-key']) {
+                            sh """
+                                set -e
+                                if [ "${params.RUN_ENVIRONMENT_SETUP}" = "true" ]; then
+                                  scp -o StrictHostKeyChecking=no infra/environment.sh ${params.DEPLOY_USER}@${host}:/tmp/environment-setup.sh
+                                  ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} 'sudo bash /tmp/environment-setup.sh'
+                                fi
+                                scp -o StrictHostKeyChecking=no ${jarFile} ${params.DEPLOY_USER}@${host}:${params.DEPLOY_REMOTE_DIR}/task-manager-bot.jar
+                                ssh -o StrictHostKeyChecking=no ${params.DEPLOY_USER}@${host} '${params.DEPLOY_RESTART_CMD}'
+                            """
+                        }
                     }
                 }
             }
@@ -100,7 +133,7 @@ pipeline {
 
     post {
         failure {
-            echo 'Проверьте агенты, OpenStack, SSH credential ssh-deploy-key, DEPLOY_HOST.'
+            echo 'Проверьте агенты, OpenStack, SSH ssh-deploy-key, DEPLOY_HOST, Secret file ENV_CREDENTIAL_ID.'
         }
     }
 }

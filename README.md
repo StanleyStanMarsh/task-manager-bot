@@ -17,7 +17,7 @@
 * **Spring WebFlux** - реактивная обработка запросов
 * **Spring Modulith** - модульная архитектура приложения
 * **MongoDB** - документоориентированная СУБД
-* **HashiCorp Vault** - управление секретами и конфигурациями
+* **Конфигурация** — `application.properties` и переменные окружения (секреты не хранятся в репозитории)
 * **Docker** + **Docker Compose** - контейнеризация и оркестрация сервисов
 * **Telegram Bot API** - взаимодействие с пользователями
 * **Undertow** - основной сервер для обработки HTTP запросов
@@ -32,7 +32,7 @@
 * **Usermanagement** (`usermanagement`) - управление пользователями: хранение профилей, прав и ролей.
 * **Authors** (`authors`) - предоставление информации об авторах.
 * **Check** (`check`) - эндпоинт для проверки работоспособности сервиса (Health Check).
-* **Config** (`config`) - загрузка и управление конфигурацией (MongoDB, Vault, безопасность, WebFlux).
+* **Config** (`config`) - загрузка и управление конфигурацией (MongoDB, безопасность, WebFlux).
 * **Infrastructure** (`infrastructure`) - служебные классы для запуска сервера и чтения системных свойств.
 * **Notification** (`notification`) - планирование и отправка уведомлений о задачах.
 * **Simpletaskmanagment** (`simpletaskmanagment`) - CRUD-операции для простых задач.
@@ -52,102 +52,34 @@
 
 ### Сервисы Docker
 
-- **vault** – сервис для хранения секретов (пароли, токены).
-- **vault-init** – сервис для инициализации Vault: загружает секреты.
-- **mongo** – сервис с базой данных для приложения и СУБД MongoDB.
-- **app** – сервис с основным Java-приложением (Task Management Bot). Зависит от успешного запуска `mongo`, `vault` и от корректного завершения работы сервиса `vault-init`.
+- **mongo** — MongoDB для приложения.
+- **app** — Java-приложение (собирается из [Dockerfile](Dockerfile)), стартует после готовности `mongo`. Секреты и настройки передаются переменными окружения.
 
-_Дополнительно_:
-- **Секреты** – [vault_root_token.txt](vault_root_token.txt) передается в сервис `app`.
-- **Том** – `mongodb_data` сохраняет данные MongoDB между перезапусками.
+**Том** `mongodb_data` сохраняет данные MongoDB между перезапусками.
 
 ---
 
 ### Конфигурация
 
-Прежде чем запустить проект, необходимо заполнить все данные для приложения.
+Значения по умолчанию задаются в [application.properties](src/main/resources/application.properties); для секретов и переопределения используйте **переменные окружения** (локально или в `docker-compose.yml`). Пример имен: `MONGO_HOST`, `MONGO_PORT`, `MONGO_DATABASE`, `MONGO_USERNAME`, `MONGO_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `SUPERADMIN_*`.
 
-> Вам перед запуском понадобится изменить два конфигурационных файла:
-> 1. [vault-init.sh](vault-init.sh) - shell-скрипт для проброса секретов (токенов, логинов, паролей) в сервис vault
-> 2. [vault_root_token.txt](vault_root_token.txt) - файл секрета с Vault токеном, который пробрасывается через docker compose в сервис app
+Для Docker Compose удобно скопировать [.env.example](.env.example) в `.env` и заполнить значения — `docker compose` подхватит файл `.env` автоматически.
 
-**Переменные окружения и секреты сервиса vault (нужно сконфигурировать в [vault-init.sh](vault-init.sh)):**
-
-* `VAULT_TOKEN` - токен доступа к Vault, записывается переменной окружения во временном контейнере `vault-init`, его можно записать **только после инициализации сервиса vault** (см. [ниже](#2-запуск-vault))
-* `mongo.host` - хост для MongoDB
-* `mongo.port` - порт для MongoDB
-* `mongo.database` - имя базы данных MongoDB
-* `mongo.username` и `mongo.password` - логин и пароль пользователя базы данных
-* `telegram.bot.token` - токен Telegram-бота (можно получить у [BotFather](https://t.me/BotFather))
-* `telegram.bot.username` - имя Telegram-бота
-* `superadmin.telegramId`, `superadmin.username`, `superadmin.firstName`, `superadmin.lastName`, `superadmin.password` - данные для SUPER-ADMIN, который обладает особыми привилегиями при администрировании приложением
-
-**Переменные окружения сервиса `mongo` (нужно сконфигурировать в [docker-compose.yml](docker-compose.yml)):**
-
-* `MONGO_INITDB_ROOT_USERNAME` и `MONGO_INITDB_ROOT_PASSWORD` - логин и пароль пользователя базы данных (должны совпадать с `mongo.username` и `mongo.password` в [vault-init.sh](vault-init.sh))
-
-**Переменные окружения и секреты сервиса `app` (нужно сконфигурировать в [docker-compose.yml](docker-compose.yml) и в [vault_root_token.txt](vault_root_token.txt)):**
-
-* `VAULT_ADDR` - адрес и порт для доступа к программе Vault в сервисе `vault` (_!изменять не требуется!_)
-* `VAULT_TOKEN_FILE` - путь до файла [vault_root_token.txt](vault_root_token.txt), который экспортируется в качестве секрета в контейнер сервиса `app` (_!изменять не требуется!_)
-
-* В [vault_root_token](vault_root_token.txt) необходимо будет записать Vault токен (см. [ниже](#2-запуск-vault))
-
-**Конфигурация секретов docker-compose:**
-
-```yaml
-secrets:
-  vault_root_token:
-    file: vault_root_token.txt
-
-```
+Учётные данные Mongo в [docker-compose.yml](docker-compose.yml) (`MONGO_INITDB_*` и переменные `app` для подключения) должны быть **согласованы**.
 
 ---
 
 ### Развёртывание
 
-#### 1. Подготовка окружения
-
-В каталог с `docker-compose.yml` поместите следующие файлы:
-
-* [vault-init.sh](vault-init.sh)
-* [vault_root_token.txt](vault_root_token.txt)
-
-#### 2. Запуск Vault
-
-Поднимите отдельно контейнер `vault` (можно без параметра `-d`, чтобы логи выводились в терминале):
+1. Соберите JAR: `mvn package` (артефакт попадёт в `target/`).
+2. Создайте `.env` из `.env.example`, укажите токен бота и данные super-admin.
+3. Запуск:
 
 ```shell
-docker compose up -d vault --build
+docker compose up --build
 ```
 
-Затем просмотрите логи контейнера `vault` и найдите строку с `Root Token: ...`. Скопируйте токен:
-
-1. Вставьте его в [vault_root_token.txt](vault_root_token.txt) (одна строка без лишних символов);
-2. Укажите этот токен в скрипте [vault-init.sh](vault-init.sh) в строке:
-    ```shell
-    VAULT_TOKEN=replace_this_text_with_token
-    ```
-
-#### 3. Запуск остальных сервисов
-
-После корректно заполненных данных в конфигурационных файлах можно запустить оставшиеся сервисы:
-
-```shell
-docker-compose up --build
-```
-
-Самым первым должен запуститься `vault-init`, который проинициализирует секреты и завершится. После его завершения должен запуститься `mongo`, после загрузки которого запустится и основной сервис `app`.
-
-Вывод в логи будет приблизительно следующий:
-
-**Запуск vault-init и mongo**
-![Логи 1](screenshot/img.png)
-
-**Запуск app**
-![Логи 2](screenshot/img_1.png)
-
-Если вы увидели данные логи и все сервисы продолжают работать без ошибок, то уже можно пользоваться ботом.
+Сначала поднимется `mongo`, затем после healthcheck — `app`.
 
 ---
 
@@ -219,9 +151,8 @@ docker-compose up --build
 
 ### Безопасность
 
-* Секреты (токены и учетные данные) не хранятся в коде и конфигурационных файлах — все секреты управляются через Vault.
+* Секреты не коммитьте в репозиторий: используйте `.env` (в `.gitignore`) или переменные окружения на сервере/в CI.
 * Сервисы изолированы в отдельных Docker-контейнерах.
-* Доступ к Vault и MongoDB ограничен соответствующими политиками.
 
 ---
 

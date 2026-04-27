@@ -1,6 +1,9 @@
 FROM eclipse-temurin:23-jdk
 
-# Устанавливаем рабочую директорию
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Копируем локально собранный JAR-файл в контейнер

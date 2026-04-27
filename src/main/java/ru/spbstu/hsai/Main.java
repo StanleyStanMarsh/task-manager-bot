@@ -11,8 +11,6 @@ import ru.spbstu.hsai.config.WebConfig;
 import ru.spbstu.hsai.telegram.BotStarter;
 import ru.spbstu.hsai.infrastructure.ServerStarter;
 import ru.spbstu.hsai.notification.SchedulerConfig;
-import ru.spbstu.hsai.config.VaultConfiguration;
-
 import java.util.concurrent.*;
 
 @Modulithic
@@ -22,7 +20,6 @@ public class Main {
 
     public static void main(String[] args) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
-                VaultConfiguration.class,
                 WebConfig.class,
                 MongoConfig.class,
                 SecurityConfig.class,
