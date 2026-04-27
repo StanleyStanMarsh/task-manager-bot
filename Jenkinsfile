@@ -63,12 +63,19 @@ pipeline {
                             fi
                             REL="$(dirname "${POM}")"
                             REL="${REL#./}"
-                            printf '%s' "${REL}" > "${WORKSPACE}/project-subdir.txt"
+                            if [ "${REL}" = "." ]; then
+                              printf '' > "${WORKSPACE}/project-subdir.txt"
+                            else
+                              printf '%s' "${REL}" > "${WORKSPACE}/project-subdir.txt"
+                            fi
                             echo "Используется каталог Maven: ${WORKSPACE}/${REL:-.}"
                         '''
                     }
 
                     def sub = readFile('project-subdir.txt').trim()
+                    if (sub == '.' || sub == './') {
+                        sub = ''
+                    }
                     def workDir = sub ? "${env.WORKSPACE}/${sub}" : env.WORKSPACE
                     def volFrom = env.JENKINS_CONTAINER?.trim()
                     def image = env.MAVEN_DOCKER_IMAGE
