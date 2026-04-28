@@ -1,10 +1,22 @@
 /**
- * OpenStack OS_* только из Jenkins Credentials (withCredentials), не с диска агента.
- * В environment задайте ровно один вариант:
- *   OS_RC_FILE_CREDENTIAL_ID — Kind: Secret file (загрузите openrc с cloud’а).
- *   OS_CREDENTIALS_ID — Kind: Secret text (вставьте тот же текст openrc: export OS_AUTH_URL=… построчно).
- * ID — как в Jenkins → Credentials (строка id креденшела). Пустые оба → сборка упадёт сразу с подсказкой.
+ * OpenStack: каждая OS_* — отдельный Jenkins credential Kind «Secret text»,
+ * id креденшела = имя переменной (OS_AUTH_URL, OS_USERNAME, OS_PASSWORD, …).
  */
+
+def openstackCredentialBindings() {
+    [
+        'OS_REGION_NAME',
+        'OS_PROJECT_DOMAIN_ID',
+        'OS_INTERFACE',
+        'OS_AUTH_URL',
+        'OS_USERNAME',
+        'OS_PROJECT_ID',
+        'OS_USER_DOMAIN_NAME',
+        'OS_PROJECT_NAME',
+        'OS_PASSWORD',
+        'OS_IDENTITY_API_VERSION',
+    ].collect { n -> string(credentialsId: n, variable: n) }
+}
 
 pipeline {
     agent none
@@ -35,10 +47,6 @@ pipeline {
         MAVEN_DOCKER_IMAGE = 'maven:3.9.9-eclipse-temurin-23'
         JENKINS_CONTAINER = 'jenkins-lab'
         PROJECT_SUBDIR = ''
-
-        // OpenStack: один из двух — id креденшела в Jenkins (см. комментарий в шапке Jenkinsfile)
-        OS_RC_FILE_CREDENTIAL_ID = ''
-        OS_CREDENTIALS_ID = ''
     }
 
     stages {
@@ -118,53 +126,22 @@ pipeline {
             agent { label "${env.HEAT_AGENT_LABEL}" }
             steps {
                 script {
-                    def fid = env.OS_RC_FILE_CREDENTIAL_ID?.trim()
-                    def sid = env.OS_CREDENTIALS_ID?.trim()
-                    if (!fid && !sid) {
-                        error('В environment {} задайте OS_RC_FILE_CREDENTIAL_ID (Secret file, openrc) или OS_CREDENTIALS_ID (Secret text, тот же openrc). ID — из Jenkins → Credentials.')
-                    }
-                    if (fid && sid) {
-                        echo 'Заданы оба OpenStack-креденшела — используется OS_RC_FILE_CREDENTIAL_ID (Secret file).'
-                    }
-
-                    def bindings = []
-                    def inject = ''
-                    if (fid) {
-                        bindings << file(credentialsId: fid, variable: 'OPENSTACK_RC_FILE')
-                        inject = '''set -a
-. "${OPENSTACK_RC_FILE}"
-set +a
-'''
-                    } else {
-                        bindings << string(credentialsId: sid, variable: 'OPENSTACK_RC_TEXT')
-                        inject = '''_osf=$(mktemp)
-umask 077
-printf '%s' "${OPENSTACK_RC_TEXT}" > "$_osf"
-set -a
-. "$_osf"
-set +a
-rm -f "$_osf"
-'''
-                    }
-
-                    withCredentials(bindings) {
-                        sh """#!/bin/bash
+                    withCredentials(openstackCredentialBindings()) {
+                        sh '''#!/bin/bash
                         set -e
-                        ${inject}
-                        if [ -z "\$OS_AUTH_URL" ] || [ -z "\$OS_USERNAME" ] || [ -z "\$OS_PASSWORD" ] || \
-                           [ -z "\$OS_USER_DOMAIN_NAME" ] || [ -z "\$OS_IDENTITY_API_VERSION" ]; then
-                          echo "После source креденшела нет OS_AUTH_URL / OS_USERNAME / OS_PASSWORD / OS_USER_DOMAIN_NAME / OS_IDENTITY_API_VERSION."
-                          echo "Проверьте содержимое Secret file / Secret text (полный openrc)."
+                        if [ -z "$OS_AUTH_URL" ] || [ -z "$OS_USERNAME" ] || [ -z "$OS_PASSWORD" ] || \
+                           [ -z "$OS_USER_DOMAIN_NAME" ] || [ -z "$OS_IDENTITY_API_VERSION" ]; then
+                          echo "Нет OS_AUTH_URL / OS_USERNAME / OS_PASSWORD / OS_USER_DOMAIN_NAME / OS_IDENTITY_API_VERSION (Secret text, id = имя переменной)."
                           exit 1
                         fi
-                        if [ -z "\$OS_PROJECT_NAME" ] && [ -z "\$OS_PROJECT_ID" ]; then
-                          echo "Нужен OS_PROJECT_NAME или OS_PROJECT_ID в openrc"
+                        if [ -z "$OS_PROJECT_NAME" ] && [ -z "$OS_PROJECT_ID" ]; then
+                          echo "Нужен OS_PROJECT_NAME или OS_PROJECT_ID"
                           exit 1
                         fi
                         set +x
                         openstack token issue -f yaml >/dev/null
                         echo "OpenStack auth OK"
-                        """
+                        '''
 
                         unstash 'project-meta'
                         def sub = readFile('project-subdir.txt').trim()
@@ -181,9 +158,9 @@ rm -f "$_osf"
                                 "--parameter key_name=${env.HEAT_PARAMETER_KEY} " +
                                 "--parameter existing_subnet_id=${env.HEAT_PARAMETER_SUBNET} " +
                                 "${stack}"
-                            sh """#!/bin/bash
+                            sh """
+                            #!/bin/bash
                             set -euo pipefail
-                            ${inject}
                             if openstack stack show ${stack} >/dev/null 2>&1; then
                               openstack stack update ${commonArgs} --wait
                             else
@@ -192,9 +169,9 @@ rm -f "$_osf"
                             openstack stack show ${stack} -c stack_status -f value
                             """
                             ip = sh(
-                                script: """#!/bin/bash
+                                script: """
+                                #!/bin/bash
                                 set -e
-                                ${inject}
                                 openstack stack output show ${stack} server_private_ip -f value -c output_value
                                 """,
                                 returnStdout: true
@@ -241,7 +218,7 @@ rm -f "$_osf"
 
     post {
         failure {
-            echo 'Maven/Docker; OpenStack: OS_RC_FILE_CREDENTIAL_ID или OS_CREDENTIALS_ID; ssh-deploy-key; ENV_CREDENTIAL_ID.'
+            echo 'Maven/Docker; OpenStack Secret text (id = OS_AUTH_URL, OS_USERNAME, …); ssh-deploy-key; ENV_CREDENTIAL_ID.'
         }
     }
 }
