@@ -1,44 +1,58 @@
 /**
- * Сборка Maven в Docker (volumes-from / bind-mount). OpenStack: credential Secret text с содержимым openrc
- * (как у Арсения: OS_CREDENTIALS_ID → loadSecretsIntoEnv). Создайте в Jenkins credential типа Secret text,
- * вставьте полный файл openstack.rc одной строкой или многострочный текст — парсер построчный.
+ * OpenStack: переменные OS_* попадают в env job одним из способов:
+ *   1) Файл ${JENKINS_HOME}/.openstack-env (построчно export OS_...=...) — удобно через docker exec
+ *   2) Manage Jenkins → Global properties → Environment variables
+ *   3) OS_CREDENTIALS_ID + Secret text (loadSecretsIntoEnv)
  */
+def applyOpenRcLines(String content) {
+    content.split(/\r?\n/).each { rawLine ->
+        try {
+            def line = rawLine.trim()
+            if (!line || line.startsWith('#')) {
+                return
+            }
+            if (line.startsWith('export ')) {
+                line = line.substring(7).trim()
+            }
+            def eq = line.indexOf('=')
+            if (eq <= 0) {
+                return
+            }
+            def key = line.substring(0, eq).trim()
+            def value = line.substring(eq + 1).trim()
+            while (value.length() >= 2 &&
+                ((value.startsWith('"') && value.endsWith('"')) ||
+                    (value.startsWith("'") && value.endsWith("'")))) {
+                value = value.substring(1, value.length() - 1)
+            }
+            env."${key}" = value
+            echo "Loaded OS env key: ${key}"
+        } catch (Exception e) {
+            echo "Skip line (parse): ${e.message}"
+        }
+    }
+}
+
 def loadSecretsIntoEnv(String credentialId) {
     if (!credentialId?.trim()) {
-        echo 'OS_CREDENTIALS_ID пуст — используются clouds.yaml / OS_* уже на агенте.'
         return
     }
     withCredentials([string(credentialsId: credentialId, variable: 'SECRET_BLOB')]) {
         def content = sh(script: '''#!/bin/bash
 printf '%s' "${SECRET_BLOB}"
 ''', returnStdout: true)
-        content.split(/\r?\n/).each { rawLine ->
-            try {
-                def line = rawLine.trim()
-                if (!line || line.startsWith('#')) {
-                    return
-                }
-                if (line.startsWith('export ')) {
-                    line = line.substring(7).trim()
-                }
-                def eq = line.indexOf('=')
-                if (eq <= 0) {
-                    return
-                }
-                def key = line.substring(0, eq).trim()
-                def value = line.substring(eq + 1).trim()
-                while (value.length() >= 2 &&
-                    ((value.startsWith('"') && value.endsWith('"')) ||
-                        (value.startsWith("'") && value.endsWith("'")))) {
-                    value = value.substring(1, value.length() - 1)
-                }
-                env."${key}" = value
-                echo "Loaded OS env key: ${key}"
-            } catch (Exception e) {
-                echo "Skip line (parse): ${e.message}"
-            }
-        }
+        applyOpenRcLines(content)
     }
+}
+
+def loadOpenStackEnvFromFile() {
+    def home = env.JENKINS_HOME ?: '/var/jenkins_home'
+    def path = "${home}/.openstack-env"
+    if (!fileExists(path)) {
+        echo "Файл ${path} не найден (создайте: docker exec -u jenkins … sh -c 'cat > …/.openstack-env')"
+        return
+    }
+    applyOpenRcLines(readFile(path))
 }
 
 pipeline {
@@ -71,11 +85,7 @@ pipeline {
         JENKINS_CONTAINER = 'jenkins-lab'
         PROJECT_SUBDIR = ''
 
-        // Пункт A: OS_* только через Jenkins UI (ниже). OS_CREDENTIALS_ID оставить пустым.
-        // Manage Jenkins → Configure System → Global properties → ☑ Environment variables — список Name/Value:
-        //   OS_AUTH_URL  OS_USERNAME  OS_PASSWORD  OS_PROJECT_NAME  OS_PROJECT_ID
-        //   OS_USER_DOMAIN_NAME  OS_PROJECT_DOMAIN_ID  OS_IDENTITY_API_VERSION
-        //   OS_REGION_NAME  OS_INTERFACE  (как у тебя в env)
+        // OpenStack: OS_CREDENTIALS_ID = Secret text id, или пусто + файл ${JENKINS_HOME}/.openstack-env или Global properties
         OS_CREDENTIALS_ID = ''
     }
 
@@ -157,17 +167,16 @@ pipeline {
             steps {
                 script {
                     loadSecretsIntoEnv(env.OS_CREDENTIALS_ID)
+                    loadOpenStackEnvFromFile()
                     sh '''
                         set -e
                         if [ -z "$OS_AUTH_URL" ] || [ -z "$OS_USERNAME" ] || [ -z "$OS_PASSWORD" ] || \
                            [ -z "$OS_USER_DOMAIN_NAME" ] || [ -z "$OS_IDENTITY_API_VERSION" ]; then
-                          echo "В окружении job нет одной из: OS_AUTH_URL OS_USERNAME OS_PASSWORD OS_USER_DOMAIN_NAME OS_IDENTITY_API_VERSION"
-                          echo "(OS_PROJECT_NAME или OS_PROJECT_ID тоже нужен — проверь ниже)"
-                          echo ""
-                          echo "В docker exec OS_* видны, но процесс Jenkins их не берёт из .bashrc."
-                          echo "Сделай одно:"
-                          echo "  A) Manage Jenkins → Configure System → Global properties → Environment variables — все OS_*"
-                          echo "  B) Credentials → Secret text + в Jenkinsfile OS_CREDENTIALS_ID=<id>, строки: export OS_AUTH_URL=..."
+                          echo "Нет OS_AUTH_URL / OS_USERNAME / OS_PASSWORD / OS_USER_DOMAIN_NAME / OS_IDENTITY_API_VERSION в окружении job."
+                          echo "OS_AUTH_URL: $OS_AUTH_URL"
+                          echo "OS_USERNAME: $OS_USERNAME"
+                          echo "OS_USER_DOMAIN_NAME: $OS_USER_DOMAIN_NAME"
+                          echo "OS_IDENTITY_API_VERSION: $OS_IDENTITY_API_VERSION"
                           exit 1
                         fi
                         if [ -z "$OS_PROJECT_NAME" ] && [ -z "$OS_PROJECT_ID" ]; then
@@ -248,7 +257,7 @@ pipeline {
 
     post {
         failure {
-            echo 'Maven/Docker, OS_CREDENTIALS_ID (Secret text openrc), ssh-deploy-key, task-manager-bot-env.'
+            echo 'Maven/Docker, JENKINS_HOME/.openstack-env или Global OS_* или OS_CREDENTIALS_ID, ssh-deploy-key, ENV_CREDENTIAL_ID.'
         }
     }
 }
