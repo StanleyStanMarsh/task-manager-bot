@@ -1,59 +1,10 @@
 /**
- * OpenStack: переменные OS_* попадают в env job одним из способов:
- *   1) Файл ${JENKINS_HOME}/.openstack-env (построчно export OS_...=...) — удобно через docker exec
- *   2) Manage Jenkins → Global properties → Environment variables
- *   3) OS_CREDENTIALS_ID + Secret text (loadSecretsIntoEnv)
+ * OpenStack OS_* только из Jenkins Credentials (withCredentials), не с диска агента.
+ * В environment задайте ровно один вариант:
+ *   OS_RC_FILE_CREDENTIAL_ID — Kind: Secret file (загрузите openrc с cloud’а).
+ *   OS_CREDENTIALS_ID — Kind: Secret text (вставьте тот же текст openrc: export OS_AUTH_URL=… построчно).
+ * ID — как в Jenkins → Credentials (строка id креденшела). Пустые оба → сборка упадёт сразу с подсказкой.
  */
-def applyOpenRcLines(String content) {
-    content.split(/\r?\n/).each { rawLine ->
-        try {
-            def line = rawLine.trim()
-            if (!line || line.startsWith('#')) {
-                return
-            }
-            if (line.startsWith('export ')) {
-                line = line.substring(7).trim()
-            }
-            def eq = line.indexOf('=')
-            if (eq <= 0) {
-                return
-            }
-            def key = line.substring(0, eq).trim()
-            def value = line.substring(eq + 1).trim()
-            while (value.length() >= 2 &&
-                ((value.startsWith('"') && value.endsWith('"')) ||
-                    (value.startsWith("'") && value.endsWith("'")))) {
-                value = value.substring(1, value.length() - 1)
-            }
-            env."${key}" = value
-            echo "Loaded OS env key: ${key}"
-        } catch (Exception e) {
-            echo "Skip line (parse): ${e.message}"
-        }
-    }
-}
-
-def loadSecretsIntoEnv(String credentialId) {
-    if (!credentialId?.trim()) {
-        return
-    }
-    withCredentials([string(credentialsId: credentialId, variable: 'SECRET_BLOB')]) {
-        def content = sh(script: '''#!/bin/bash
-printf '%s' "${SECRET_BLOB}"
-''', returnStdout: true)
-        applyOpenRcLines(content)
-    }
-}
-
-def loadOpenStackEnvFromFile() {
-    def home = env.JENKINS_HOME ?: '/var/jenkins_home'
-    def path = "${home}/.openstack-env"
-    if (!fileExists(path)) {
-        echo "Файл ${path} не найден (создайте: docker exec -u jenkins … sh -c 'cat > …/.openstack-env')"
-        return
-    }
-    applyOpenRcLines(readFile(path))
-}
 
 pipeline {
     agent none
@@ -85,7 +36,8 @@ pipeline {
         JENKINS_CONTAINER = 'jenkins-lab'
         PROJECT_SUBDIR = ''
 
-        // OpenStack: OS_CREDENTIALS_ID = Secret text id, или пусто + файл ${JENKINS_HOME}/.openstack-env или Global properties
+        // OpenStack: один из двух — id креденшела в Jenkins (см. комментарий в шапке Jenkinsfile)
+        OS_RC_FILE_CREDENTIAL_ID = ''
         OS_CREDENTIALS_ID = ''
     }
 
@@ -166,59 +118,91 @@ pipeline {
             agent { label "${env.HEAT_AGENT_LABEL}" }
             steps {
                 script {
-                    loadSecretsIntoEnv(env.OS_CREDENTIALS_ID)
-                    loadOpenStackEnvFromFile()
-                    sh '''
+                    def fid = env.OS_RC_FILE_CREDENTIAL_ID?.trim()
+                    def sid = env.OS_CREDENTIALS_ID?.trim()
+                    if (!fid && !sid) {
+                        error('В environment {} задайте OS_RC_FILE_CREDENTIAL_ID (Secret file, openrc) или OS_CREDENTIALS_ID (Secret text, тот же openrc). ID — из Jenkins → Credentials.')
+                    }
+                    if (fid && sid) {
+                        echo 'Заданы оба OpenStack-креденшела — используется OS_RC_FILE_CREDENTIAL_ID (Secret file).'
+                    }
+
+                    def bindings = []
+                    def inject = ''
+                    if (fid) {
+                        bindings << file(credentialsId: fid, variable: 'OPENSTACK_RC_FILE')
+                        inject = '''set -a
+. "${OPENSTACK_RC_FILE}"
+set +a
+'''
+                    } else {
+                        bindings << string(credentialsId: sid, variable: 'OPENSTACK_RC_TEXT')
+                        inject = '''_osf=$(mktemp)
+umask 077
+printf '%s' "${OPENSTACK_RC_TEXT}" > "$_osf"
+set -a
+. "$_osf"
+set +a
+rm -f "$_osf"
+'''
+                    }
+
+                    withCredentials(bindings) {
+                        sh """#!/bin/bash
                         set -e
-                        if [ -z "$OS_AUTH_URL" ] || [ -z "$OS_USERNAME" ] || [ -z "$OS_PASSWORD" ] || \
-                           [ -z "$OS_USER_DOMAIN_NAME" ] || [ -z "$OS_IDENTITY_API_VERSION" ]; then
-                          echo "Нет OS_AUTH_URL / OS_USERNAME / OS_PASSWORD / OS_USER_DOMAIN_NAME / OS_IDENTITY_API_VERSION в окружении job."
-                          echo "OS_AUTH_URL: $OS_AUTH_URL"
-                          echo "OS_USERNAME: $OS_USERNAME"
-                          echo "OS_USER_DOMAIN_NAME: $OS_USER_DOMAIN_NAME"
-                          echo "OS_IDENTITY_API_VERSION: $OS_IDENTITY_API_VERSION"
+                        ${inject}
+                        if [ -z "\$OS_AUTH_URL" ] || [ -z "\$OS_USERNAME" ] || [ -z "\$OS_PASSWORD" ] || \
+                           [ -z "\$OS_USER_DOMAIN_NAME" ] || [ -z "\$OS_IDENTITY_API_VERSION" ]; then
+                          echo "После source креденшела нет OS_AUTH_URL / OS_USERNAME / OS_PASSWORD / OS_USER_DOMAIN_NAME / OS_IDENTITY_API_VERSION."
+                          echo "Проверьте содержимое Secret file / Secret text (полный openrc)."
                           exit 1
                         fi
-                        if [ -z "$OS_PROJECT_NAME" ] && [ -z "$OS_PROJECT_ID" ]; then
-                          echo "Нужен OS_PROJECT_NAME или OS_PROJECT_ID"
+                        if [ -z "\$OS_PROJECT_NAME" ] && [ -z "\$OS_PROJECT_ID" ]; then
+                          echo "Нужен OS_PROJECT_NAME или OS_PROJECT_ID в openrc"
                           exit 1
                         fi
                         set +x
                         openstack token issue -f yaml >/dev/null
                         echo "OpenStack auth OK"
-                    '''
+                        """
 
-                    unstash 'project-meta'
-                    def sub = readFile('project-subdir.txt').trim()
+                        unstash 'project-meta'
+                        def sub = readFile('project-subdir.txt').trim()
 
-                    def stack = env.HEAT_STACK_NAME
-                    def ip
-                    dir('infra-work') {
-                        deleteDir()
-                        unstash 'heat-infra'
-                        def tpl = sub ? "${sub}/${env.HEAT_TEMPLATE_PATH}" : env.HEAT_TEMPLATE_PATH
-                        def commonArgs = "-t ${tpl} " +
-                            "--parameter image_id=${env.HEAT_PARAMETER_IMAGE} " +
-                            "--parameter flavor_id=${env.HEAT_PARAMETER_FLAVOR} " +
-                            "--parameter key_name=${env.HEAT_PARAMETER_KEY} " +
-                            "--parameter existing_subnet_id=${env.HEAT_PARAMETER_SUBNET} " +
-                            "${stack}"
-                        sh """
+                        def stack = env.HEAT_STACK_NAME
+                        def ip
+                        dir('infra-work') {
+                            deleteDir()
+                            unstash 'heat-infra'
+                            def tpl = sub ? "${sub}/${env.HEAT_TEMPLATE_PATH}" : env.HEAT_TEMPLATE_PATH
+                            def commonArgs = "-t ${tpl} " +
+                                "--parameter image_id=${env.HEAT_PARAMETER_IMAGE} " +
+                                "--parameter flavor_id=${env.HEAT_PARAMETER_FLAVOR} " +
+                                "--parameter key_name=${env.HEAT_PARAMETER_KEY} " +
+                                "--parameter existing_subnet_id=${env.HEAT_PARAMETER_SUBNET} " +
+                                "${stack}"
+                            sh """#!/bin/bash
                             set -euo pipefail
+                            ${inject}
                             if openstack stack show ${stack} >/dev/null 2>&1; then
                               openstack stack update ${commonArgs} --wait
                             else
                               openstack stack create ${commonArgs} --wait
                             fi
                             openstack stack show ${stack} -c stack_status -f value
-                        """
-                        ip = sh(
-                            script: "openstack stack output show ${stack} server_private_ip -f value -c output_value",
-                            returnStdout: true
-                        ).trim()
+                            """
+                            ip = sh(
+                                script: """#!/bin/bash
+                                set -e
+                                ${inject}
+                                openstack stack output show ${stack} server_private_ip -f value -c output_value
+                                """,
+                                returnStdout: true
+                            ).trim()
+                        }
+                        writeFile file: 'deploy-host.txt', text: ip
+                        stash name: 'deploy-host', includes: 'deploy-host.txt'
                     }
-                    writeFile file: 'deploy-host.txt', text: ip
-                    stash name: 'deploy-host', includes: 'deploy-host.txt'
                 }
             }
         }
@@ -257,7 +241,7 @@ pipeline {
 
     post {
         failure {
-            echo 'Maven/Docker, JENKINS_HOME/.openstack-env или Global OS_* или OS_CREDENTIALS_ID, ssh-deploy-key, ENV_CREDENTIAL_ID.'
+            echo 'Maven/Docker; OpenStack: OS_RC_FILE_CREDENTIAL_ID или OS_CREDENTIALS_ID; ssh-deploy-key; ENV_CREDENTIAL_ID.'
         }
     }
 }
