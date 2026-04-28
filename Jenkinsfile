@@ -71,7 +71,11 @@ pipeline {
         JENKINS_CONTAINER = 'jenkins-lab'
         PROJECT_SUBDIR = ''
 
-        // Secret text с openstack rc — ID своего credential; пусто = только clouds.yaml/OS_* на агенте
+        // Пункт A: OS_* только через Jenkins UI (ниже). OS_CREDENTIALS_ID оставить пустым.
+        // Manage Jenkins → Configure System → Global properties → ☑ Environment variables — список Name/Value:
+        //   OS_AUTH_URL  OS_USERNAME  OS_PASSWORD  OS_PROJECT_NAME  OS_PROJECT_ID
+        //   OS_USER_DOMAIN_NAME  OS_PROJECT_DOMAIN_ID  OS_IDENTITY_API_VERSION
+        //   OS_REGION_NAME  OS_INTERFACE  (как у тебя в env)
         OS_CREDENTIALS_ID = ''
     }
 
@@ -154,6 +158,22 @@ pipeline {
                 script {
                     loadSecretsIntoEnv(env.OS_CREDENTIALS_ID)
                     sh '''
+                        set -e
+                        if [ -z "$OS_AUTH_URL" ] || [ -z "$OS_USERNAME" ] || [ -z "$OS_PASSWORD" ] || \
+                           [ -z "$OS_USER_DOMAIN_NAME" ] || [ -z "$OS_IDENTITY_API_VERSION" ]; then
+                          echo "В окружении job нет одной из: OS_AUTH_URL OS_USERNAME OS_PASSWORD OS_USER_DOMAIN_NAME OS_IDENTITY_API_VERSION"
+                          echo "(OS_PROJECT_NAME или OS_PROJECT_ID тоже нужен — проверь ниже)"
+                          echo ""
+                          echo "В docker exec OS_* видны, но процесс Jenkins их не берёт из .bashrc."
+                          echo "Сделай одно:"
+                          echo "  A) Manage Jenkins → Configure System → Global properties → Environment variables — все OS_*"
+                          echo "  B) Credentials → Secret text + в Jenkinsfile OS_CREDENTIALS_ID=<id>, строки: export OS_AUTH_URL=..."
+                          exit 1
+                        fi
+                        if [ -z "$OS_PROJECT_NAME" ] && [ -z "$OS_PROJECT_ID" ]; then
+                          echo "Нужен OS_PROJECT_NAME или OS_PROJECT_ID"
+                          exit 1
+                        fi
                         set +x
                         openstack token issue -f yaml >/dev/null
                         echo "OpenStack auth OK"
