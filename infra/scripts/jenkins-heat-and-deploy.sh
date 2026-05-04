@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Jenkins: env OPENSTACK_ENV, BOT_ENV_FILE, STACK_NAME, SSH_PRIVATE_KEY, HEAT_ENV_FILE, SSH_USER.
-# Корень checkout = репозиторий task-manager-bot (рядом с pom.xml).
+# Jenkins: OPENSTACK_ENV, BOT_ENV_FILE, STACK_NAME, SSH_PRIVATE_KEY, HEAT_ENV_FILE, SSH_USER.
+# Если задан JUMP_HOST — openstack/heat и деплой на целевую ВМ выполняются НА jump-машине (доступ к API и student-net).
+# Иначе — как раньше: всё с агента Jenkins (нужен прямой доступ к OS_AUTH_URL и к IP новой ВМ).
 set -euxo pipefail
 
 : "${OPENSTACK_ENV:?}"
@@ -10,6 +11,9 @@ set -euxo pipefail
 : "${HEAT_ENV_FILE:?}"
 : "${SSH_USER:=ubuntu}"
 
+: "${JUMP_USER:=ubuntu}"
+: "${TARGET_SSH_KEY_ON_JUMP:=/home/ubuntu/.ssh/astafyev-key.pem}"
+
 WS="${WORKSPACE:-$(pwd)}"
 cd "$WS"
 
@@ -18,6 +22,50 @@ ENV_ABS="$WS/$HEAT_ENV_FILE"
 REMOTE_DIR="/opt/task-manager-bot"
 
 echo ">>> [deploy] workspace=${WS}"
+echo ">>> [deploy] JUMP_HOST=${JUMP_HOST:-<empty>=локальный openstack}"
+
+# ---------------------------------------------------------------------------
+# Режим через jump-хост (существующая ВМ в OpenStack с openstack CLI и маршрутом к API)
+# ---------------------------------------------------------------------------
+if [[ -n "${JUMP_HOST:-}" ]]; then
+  echo ">>> [deploy] режим: передача пакета на ${JUMP_USER}@${JUMP_HOST}, Heat/деплой выполняются там"
+
+  STAGE="$(mktemp -d)"
+  cleanup_stage() { rm -rf "${STAGE}"; }
+  trap cleanup_stage EXIT
+
+  mkdir -p "${STAGE}/infra" "${STAGE}/target"
+  cp "${WS}/infra/template.yaml" "${STAGE}/infra/"
+  cp "${ENV_ABS}" "${STAGE}/infra/heat-env.yaml"
+  cp "${OPENSTACK_ENV}" "${STAGE}/openstack.rc"
+  chmod 600 "${STAGE}/openstack.rc"
+  cp "${WS}/infra/environment.sh" "${STAGE}/infra/"
+  cp "${WS}/docker-compose.yml" "${WS}/Dockerfile" "${STAGE}/"
+  cp "${BOT_ENV_FILE}" "${STAGE}/.env"
+  JAR="$(ls "${WS}"/target/task-manager-bot-*.jar | head -1)"
+  cp "${JAR}" "${STAGE}/target/task-manager-bot-0.5-DEMO.jar"
+  cp "${WS}/infra/scripts/remote-heat-deploy-on-jump.sh" "${STAGE}/run-on-jump.sh"
+  chmod +x "${STAGE}/run-on-jump.sh"
+
+  JUMP_SSH=(ssh -i "${SSH_PRIVATE_KEY}" -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null)
+  REMOTE_BASE="/tmp/jenkins-heat-${BUILD_NUMBER:-0}-${RANDOM}"
+
+  "${JUMP_SSH[@]}" -o ConnectTimeout=15 "${JUMP_USER}@${JUMP_HOST}" "rm -rf '${REMOTE_BASE}' && mkdir -p '${REMOTE_BASE}'"
+
+  tar -C "${STAGE}" -czf - . | "${JUMP_SSH[@]}" "${JUMP_USER}@${JUMP_HOST}" "tar xzf - -C '${REMOTE_BASE}'"
+
+  "${JUMP_SSH[@]}" "${JUMP_USER}@${JUMP_HOST}" \
+    "bash '${REMOTE_BASE}/run-on-jump.sh' '${REMOTE_BASE}' '${STACK_NAME}' '${TARGET_SSH_KEY_ON_JUMP}' '${SSH_USER}' '${SSH_READY_TIMEOUT_SEC:-600}'"
+
+  "${JUMP_SSH[@]}" "${JUMP_USER}@${JUMP_HOST}" "rm -rf '${REMOTE_BASE}'"
+
+  echo ">>> [deploy] jump-режим завершён"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Локальный режим (openstack на агенте Jenkins)
+# ---------------------------------------------------------------------------
 echo ">>> [deploy] template=${TEMPLATE} env=${ENV_ABS}"
 
 set -a
@@ -63,12 +111,12 @@ echo ">>> [deploy] prepare remote dir"
 "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "sudo mkdir -p '${REMOTE_DIR}/target' && sudo chown -R '${SSH_USER}:${SSH_USER}' '${REMOTE_DIR}'"
 
 echo ">>> [deploy] scp files"
-"${SCP_BASE[@]}" "$WS/infra/environment.sh" "${SSH_USER}@${SERVER_IP}:/tmp/environment.sh"
-"${SCP_BASE[@]}" "$WS/docker-compose.yml" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/docker-compose.yml"
-"${SCP_BASE[@]}" "$WS/Dockerfile" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/Dockerfile"
+"${SCP_BASE[@]}" "${WS}/infra/environment.sh" "${SSH_USER}@${SERVER_IP}:/tmp/environment.sh"
+"${SCP_BASE[@]}" "${WS}/docker-compose.yml" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/docker-compose.yml"
+"${SCP_BASE[@]}" "${WS}/Dockerfile" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/Dockerfile"
 "${SCP_BASE[@]}" "${BOT_ENV_FILE}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/.env"
 
-JAR="$(ls "$WS"/target/task-manager-bot-*.jar | head -1)"
+JAR="$(ls "${WS}"/target/task-manager-bot-*.jar | head -1)"
 "${SCP_BASE[@]}" "${JAR}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/target/task-manager-bot-0.5-DEMO.jar"
 
 echo ">>> [deploy] run environment.sh on VM"

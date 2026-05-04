@@ -1,5 +1,4 @@
-// Отдельный job: удаление стека Heat. Script Path = Jenkinsfile.destroy
-// Credential: openstack-noninteractive-rc (Secret file)
+// Удаление стека Heat. При JUMP_HOST — команды выполняются на jump (как в основном пайплайне).
 pipeline {
   agent any
 
@@ -8,6 +7,11 @@ pipeline {
       description: 'Имя стека Heat для удаления (обязательно).')
     booleanParam(name: 'DRY_RUN', defaultValue: false,
       description: 'Если включено — только openstack stack show, без delete.')
+    string(name: 'JUMP_HOST', defaultValue: '', trim: true,
+      description: 'Jump ВМ, если Jenkins не достучится до OpenStack API. Пусто — команды на агенте.')
+    string(name: 'JUMP_USER', defaultValue: 'ubuntu', trim: true)
+    string(name: 'SSH_PRIVATE_KEY', defaultValue: '/var/jenkins_home/.ssh/astafyev-key.pem', trim: true,
+      description: 'Ключ Jenkins → jump (если задан JUMP_HOST).')
   }
 
   stages {
@@ -20,21 +24,33 @@ pipeline {
         }
         withEnv([
           "STACK_NAME=${params.STACK_NAME}",
-          "DRY_RUN=${params.DRY_RUN ? 'true' : 'false'}"
+          "DRY_RUN=${params.DRY_RUN ? 'true' : 'false'}",
+          "JUMP_HOST=${params.JUMP_HOST}",
+          "JUMP_USER=${params.JUMP_USER}",
+          "SSH_PRIVATE_KEY=${params.SSH_PRIVATE_KEY}"
         ]) {
           withCredentials([
             file(credentialsId: 'openstack-noninteractive-rc', variable: 'OPENSTACK_ENV')
           ]) {
             sh '''
               set -euxo pipefail
-              set -a
-              . "${OPENSTACK_ENV}"
-              set +a
-              openstack token issue >/dev/null
-              if [ "${DRY_RUN}" = "true" ]; then
-                openstack stack show "${STACK_NAME}"
+              if [ -n "${JUMP_HOST:-}" ]; then
+                RFILE="/tmp/jenkins-destroy-$$-${BUILD_NUMBER:-0}.rc"
+                scp -i "${SSH_PRIVATE_KEY}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null \
+                  "${OPENSTACK_ENV}" "${JUMP_USER}@${JUMP_HOST}:${RFILE}"
+                ssh -i "${SSH_PRIVATE_KEY}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null \
+                  "${JUMP_USER}@${JUMP_HOST}" \
+                  "bash -lc 'set -euxo pipefail; chmod 600 \"${RFILE}\"; set -a; . \"${RFILE}\"; set +a; openstack token issue >/dev/null; if [ \"${DRY_RUN}\" = \"true\" ]; then openstack stack show \"${STACK_NAME}\"; else openstack stack delete \"${STACK_NAME}\" --wait; fi; rm -f \"${RFILE}\"'"
               else
-                openstack stack delete "${STACK_NAME}" --wait
+                set -a
+                . "${OPENSTACK_ENV}"
+                set +a
+                openstack token issue >/dev/null
+                if [ "${DRY_RUN}" = "true" ]; then
+                  openstack stack show "${STACK_NAME}"
+                else
+                  openstack stack delete "${STACK_NAME}" --wait
+                fi
               fi
             '''
           }
