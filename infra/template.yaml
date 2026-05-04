@@ -1,64 +1,71 @@
 heat_template_version: 2015-10-15
 
 description: |
-  инфраструктура для task-management-bot
+  Инфраструктура для task-management-bot: ВМ Ubuntu, Cinder-том под Mongo,
+  подключение к существующим security groups (без создания дубликата astafyev-sg).
 
 parameters:
   image_id:
     type: string
-    label: Image
-    default: "ununtu-22.04"
+    label: Image name or UUID
+    default: "16729277-5d18-44ce-9581-1b2fd5d5659a"
 
   flavor_id:
     type: string
-    label: Flavor
+    label: Flavor name or UUID
     default: "m1.small"
 
   key_name:
     type: string
-    label: SSH Key
-    default: "astafye-key"
+    label: SSH key pair name (Nova)
+    default: "astafyev-key"
 
   existing_subnet_id:
     type: string
-    label: Existing Subnet ID
-    default: "87af7ae7-714d-4472-b19a-7a4ec8505165"
+    label: Subnet UUID (e.g. student-net)
+    description: |
+      Укажите UUID подсети из Horizon (Network → student-net → Subnets).
+
+  security_groups:
+    type: comma_delimited_list
+    label: Existing Nova security group names
+    description: |
+      Список имён уже созданных групп (через запятую), например astafyev-sg или astafyev-sg,default.
+    default: "astafyev-sg"
+
+  availability_zone:
+    type: string
+    label: Availability zone
+    default: "nova"
 
 resources:
-  bot_security_group:
-    type: OS::Neutron::SecurityGroup
-    properties:
-      name: astafyev-sg
-      description: SG for task-management-bot
-      rules:
-        - protocol: tcp
-          port_range_min: 22
-          port_range_max: 22
-          remote_ip_prefix: 0.0.0.0/0
-        - protocol: tcp
-          port_range_min: 8080
-          port_range_max: 8080
-          remote_ip_prefix: 0.0.0.0/0
-
   mongo_volume:
     type: OS::Cinder::Volume
     deletion_policy: Delete
     properties:
-      name: mongo-vol
+      name:
+        list_join:
+          - "-"
+          - - { get_param: "OS::stack_name" }
+            - "mongo-vol"
       size: 10
-      description: MongoDB data volume
+      description: MongoDB data volume for task-manager-bot
 
   bot_server:
     type: OS::Nova::Server
     properties:
-      name: astafyev-task-manager-bot
+      name:
+        list_join:
+          - "-"
+          - - "taskmgr-bot"
+            - { get_param: "OS::stack_name" }
       image: { get_param: image_id }
       flavor: { get_param: flavor_id }
       key_name: { get_param: key_name }
+      availability_zone: { get_param: availability_zone }
       networks:
         - subnet: { get_param: existing_subnet_id }
-      security_groups:
-        - { get_resource: bot_security_group }
+      security_groups: { get_param: security_groups }
 
   mongo_attach:
     type: OS::Cinder::VolumeAttachment
@@ -69,21 +76,27 @@ resources:
 
 outputs:
   server_private_ip:
-    description: "Private IP address"
+    description: "Private IP address (first address on subnet)"
     value: { get_attr: [bot_server, first_address] }
 
   server_name:
-    description: "Server name"
+    description: "Server display name"
     value: { get_attr: [bot_server, name] }
 
-  ssh_command:
-    description: "SSH command (via bastion/VPN)"
-    value:
-      str_replace:
-        template: "ssh -i <key> ubuntu@{ip}"
-        params:
-          ip: { get_attr: [bot_server, first_address] }
+  server_id:
+    description: "Nova instance UUID"
+    value: { get_resource: bot_server }
 
-  console_url:
-    description: "How to access console"
-    value: "OpenStack Dashboard → Compute → Instances → bot-vm → Console"
+  ssh_command:
+    description: "SSH example (VPN or same L2 as subnet)"
+    value:
+      list_join:
+        - ""
+        - - "ssh -i ~/.ssh/"
+          - { get_param: key_name }
+          - ".pem ubuntu@"
+          - { get_attr: [bot_server, first_address] }
+
+  stack_name_out:
+    description: "Heat stack name"
+    value: { get_param: "OS::stack_name" }

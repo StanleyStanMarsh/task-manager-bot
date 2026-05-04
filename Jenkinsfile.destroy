@@ -1,0 +1,45 @@
+// Отдельный job: удаление стека Heat. Script Path = Jenkinsfile.destroy
+// Credential: openstack-noninteractive-rc (Secret file)
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'STACK_NAME', defaultValue: '', trim: true,
+      description: 'Имя стека Heat для удаления (обязательно).')
+    booleanParam(name: 'DRY_RUN', defaultValue: false,
+      description: 'Если включено — только openstack stack show, без delete.')
+  }
+
+  stages {
+    stage('Delete stack') {
+      steps {
+        script {
+          if (!params.STACK_NAME?.trim()) {
+            error('Укажите STACK_NAME')
+          }
+        }
+        withEnv([
+          "STACK_NAME=${params.STACK_NAME}",
+          "DRY_RUN=${params.DRY_RUN ? 'true' : 'false'}"
+        ]) {
+          withCredentials([
+            file(credentialsId: 'openstack-noninteractive-rc', variable: 'OPENSTACK_ENV')
+          ]) {
+            sh '''
+              set -euxo pipefail
+              set -a
+              . "${OPENSTACK_ENV}"
+              set +a
+              openstack token issue >/dev/null
+              if [ "${DRY_RUN}" = "true" ]; then
+                openstack stack show "${STACK_NAME}"
+              else
+                openstack stack delete "${STACK_NAME}" --wait
+              fi
+            '''
+          }
+        }
+      }
+    }
+  }
+}

@@ -40,3 +40,5 @@ build/
 /src/main/resources/telegram.properties
 
 .env
+infra/heat-env.local.yaml
+infra/openstack-env.sh
