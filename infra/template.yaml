@@ -71,6 +71,13 @@ resources:
         #cloud-config
         package_update: true
         package_upgrade: true
+        # Официальный Docker CE + Compose plugin (см. обсуждение apt/keyid на Stack Overflow и документацию Docker).
+        # Образ ВМ у студенческих облаков обычно amd64; для arm64 замените [arch=amd64] на [arch=arm64].
+        apt:
+          sources:
+            docker-ce.list:
+              source: deb [arch=amd64] https://download.docker.com/linux/ubuntu $RELEASE stable
+              keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
         packages:
           - sudo
           - curl
@@ -79,7 +86,9 @@ resources:
           - jq
           - xfsprogs
           - e2fsprogs
-          - docker.io
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
           - docker-compose-plugin
         runcmd:
           # Docker: enable and allow ubuntu user to run without sudo

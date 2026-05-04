@@ -67,8 +67,40 @@ run_deploy_on_target() {
   "${SCP_BASE[@]}" "${jar}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/target/task-manager-bot-0.5-DEMO.jar"
 
   echo ">>> [deploy] docker compose up"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && (docker compose pull --ignore-pull-failures 2>/dev/null || ${SUDO} docker compose pull --ignore-pull-failures 2>/dev/null || true)"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && (docker compose up -d --build || ${SUDO} docker compose up -d --build)"
+  # Часто docker.io без плагина: подкоманда «compose» недоступна → ставим пакет docker-compose (см. Heat template).
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" bash -s <<DEPLOY_EOF
+set -euxo pipefail
+cd ${REMOTE_DIR}
+compose_pull() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose pull --ignore-pull-failures 2>/dev/null || true
+  elif command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1; then
+    sudo docker compose pull --ignore-pull-failures 2>/dev/null || true
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose pull --ignore-pull-failures 2>/dev/null || true
+  elif command -v sudo >/dev/null 2>&1 && sudo docker-compose version >/dev/null 2>&1; then
+    sudo docker-compose pull --ignore-pull-failures 2>/dev/null || true
+  else
+    echo "Не найдены ни «docker compose», ни docker-compose." >&2
+    exit 127
+  fi
+}
+compose_up() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose up -d --build
+  elif command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1; then
+    sudo docker compose up -d --build
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose up -d --build
+  elif command -v sudo >/dev/null 2>&1 && sudo docker-compose version >/dev/null 2>&1; then
+    sudo docker-compose up -d --build
+  else
+    exit 127
+  fi
+}
+compose_pull
+compose_up
+DEPLOY_EOF
 
   echo ">>> [deploy] done. App: http://${SERVER_IP}:8080"
 }

@@ -57,22 +57,39 @@ until "${SSH_BASE[@]}" -o ConnectTimeout=10 "${TARGET_USER}@${SERVER_IP}" "echo 
   sleep 10
 done
 
+echo ">>> [jump] wait cloud-init (best effort)"
+"${SSH_BASE[@]}" "${TARGET_USER}@${SERVER_IP}" "command -v cloud-init >/dev/null 2>&1 && (cloud-init status --wait || true) || true"
+
 echo ">>> [jump] prepare dir on target"
 "${SSH_BASE[@]}" "${TARGET_USER}@${SERVER_IP}" "sudo mkdir -p '${REMOTE_APP}/target' && sudo chown -R '${TARGET_USER}:${TARGET_USER}' '${REMOTE_APP}'"
 
 echo ">>> [jump] scp to target"
-"${SCP_BASE[@]}" "${BASE_DIR}/infra/environment.sh" "${TARGET_USER}@${SERVER_IP}:/tmp/environment.sh"
 "${SCP_BASE[@]}" "${BASE_DIR}/docker-compose.yml" "${TARGET_USER}@${SERVER_IP}:${REMOTE_APP}/docker-compose.yml"
 "${SCP_BASE[@]}" "${BASE_DIR}/Dockerfile" "${TARGET_USER}@${SERVER_IP}:${REMOTE_APP}/Dockerfile"
 "${SCP_BASE[@]}" "${BASE_DIR}/.env" "${TARGET_USER}@${SERVER_IP}:${REMOTE_APP}/.env"
 "${SCP_BASE[@]}" "${BASE_DIR}/target/task-manager-bot-0.5-DEMO.jar" "${TARGET_USER}@${SERVER_IP}:${REMOTE_APP}/target/task-manager-bot-0.5-DEMO.jar"
 
-echo ">>> [jump] environment.sh on target"
-"${SSH_BASE[@]}" "${TARGET_USER}@${SERVER_IP}" "sudo bash /tmp/environment.sh"
-
 echo ">>> [jump] docker compose up"
-"${SSH_BASE[@]}" "${TARGET_USER}@${SERVER_IP}" "cd '${REMOTE_APP}' && sudo docker compose pull --ignore-pull-failures 2>/dev/null || true"
-"${SSH_BASE[@]}" "${TARGET_USER}@${SERVER_IP}" "cd '${REMOTE_APP}' && sudo docker compose up -d --build"
+"${SSH_BASE[@]}" "${TARGET_USER}@${SERVER_IP}" bash -s <<EOS
+set -euxo pipefail
+cd ${REMOTE_APP}
+if docker compose version >/dev/null 2>&1; then
+  docker compose pull --ignore-pull-failures 2>/dev/null || true
+  docker compose up -d --build
+elif command -v sudo >/dev/null 2>&1 && sudo docker compose version >/dev/null 2>&1; then
+  sudo docker compose pull --ignore-pull-failures 2>/dev/null || true
+  sudo docker compose up -d --build
+elif command -v docker-compose >/dev/null 2>&1; then
+  docker-compose pull --ignore-pull-failures 2>/dev/null || true
+  docker-compose up -d --build
+elif command -v sudo >/dev/null 2>&1 && sudo docker-compose version >/dev/null 2>&1; then
+  sudo docker-compose pull --ignore-pull-failures 2>/dev/null || true
+  sudo docker-compose up -d --build
+else
+  echo "docker compose / docker-compose not found" >&2
+  exit 127
+fi
+EOS
 
 echo ">>> [jump] done. App: http://${SERVER_IP}:8080"
 
