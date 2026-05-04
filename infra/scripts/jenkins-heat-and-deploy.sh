@@ -170,7 +170,7 @@ else
 fi
 
 SERVER_IP="$(
-  openstack stack output show "${STACK_NAME}" server_private_ip -f value -c output_value | tr -d '\r'
+  openstack stack output show "${STACK_NAME}" server_private_ip 2>/dev/null | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' | head -1 || true
 )"
 if [[ -z "${SERVER_IP}" ]]; then
   echo "Empty server_private_ip output" >&2

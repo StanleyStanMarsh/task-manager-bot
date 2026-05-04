@@ -20,14 +20,15 @@ ENVFILE="${BASE_DIR}/infra/heat-env.yaml"
 
 if openstack stack show "${STACK_NAME}" &>/dev/null; then
   echo ">>> [heat-only] stack update" >&2
-  openstack stack update "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait
+  openstack stack update "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait >&2
 else
   echo ">>> [heat-only] stack create" >&2
-  openstack stack create "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait
+  openstack stack create "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait >&2
 fi
 
+# Некоторые версии OSC путают колонки -f value -c output_value; берём первый IPv4 из вывода
 SERVER_IP="$(
-  openstack stack output show "${STACK_NAME}" server_private_ip -f value -c output_value | tr -d '\r'
+  openstack stack output show "${STACK_NAME}" server_private_ip 2>/dev/null | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' | head -1 || true
 )"
 if [[ -z "${SERVER_IP}" ]]; then
   echo "Empty server_private_ip" >&2

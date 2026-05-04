@@ -28,15 +28,15 @@ ENVFILE="${BASE_DIR}/infra/heat-env.yaml"
 
 if openstack stack show "${STACK_NAME}" &>/dev/null; then
   echo ">>> [jump] Heat stack update: ${STACK_NAME}"
-  openstack stack update "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait
+  openstack stack update "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait >&2
 else
   echo ">>> [jump] Heat stack create: ${STACK_NAME}"
-  openstack stack create "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait
+  openstack stack create "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait >&2
 fi
 
 echo ">>> [jump] read server_private_ip"
 SERVER_IP="$(
-  openstack stack output show "${STACK_NAME}" server_private_ip -f value -c output_value | tr -d '\r'
+  openstack stack output show "${STACK_NAME}" server_private_ip 2>/dev/null | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' | head -1 || true
 )"
 if [[ -z "${SERVER_IP}" ]]; then
   echo "Empty server_private_ip output" >&2
