@@ -5,10 +5,14 @@
 //   - openstack-noninteractive-rc : Secret file — exports (см. infra/openrc-noninteractive.example)
 //   - task-manager-bot-env        : Secret file — содержимое .env для docker compose на ВМ
 //
-// Логи: Heat/SSH/docker выполняются в infra/scripts/jenkins-heat-and-deploy.sh с set -x;
-// вывод stderr/stdout попадает в консоль job; при падении видна последняя выполненная команда.
+// Сборка: Java 23 (pom) — только в stage Build (JAVA_HOME), чтобы мастер Jenkins оставался на JDK 21 из образа.
+// Логи: Heat/SSH/docker в infra/scripts/jenkins-heat-and-deploy.sh; bash -x в шаге ниже.
 pipeline {
   agent any
+
+  environment {
+    MAVEN_JAVA_HOME = '/opt/java/temurin-23'
+  }
 
   parameters {
     string(name: 'STACK_NAME', defaultValue: 'taskmgr-bot-stack', trim: true,
@@ -31,7 +35,12 @@ pipeline {
 
     stage('Build JAR') {
       steps {
-        sh 'mvn -B -ntp package'
+        withEnv([
+          "JAVA_HOME=${env.MAVEN_JAVA_HOME}",
+          "PATH+MAVENJAVA=${env.MAVEN_JAVA_HOME}/bin"
+        ]) {
+          sh 'mvn -B -ntp package'
+        }
       }
     }
 
