@@ -43,10 +43,9 @@ run_deploy_on_target() {
   done
 
   echo ">>> [deploy] prepare remote dir"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "sudo mkdir -p '${REMOTE_DIR}/target' && sudo chown -R '${SSH_USER}:${SSH_USER}' '${REMOTE_DIR}'"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "mkdir -p '${REMOTE_DIR}/target' && chown -R '${SSH_USER}:${SSH_USER}' '${REMOTE_DIR}'"
 
   echo ">>> [deploy] scp files"
-  "${SCP_BASE[@]}" "${WS}/infra/environment.sh" "${SSH_USER}@${SERVER_IP}:/tmp/environment.sh"
   "${SCP_BASE[@]}" "${WS}/docker-compose.yml" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/docker-compose.yml"
   "${SCP_BASE[@]}" "${WS}/Dockerfile" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/Dockerfile"
   "${SCP_BASE[@]}" "${BOT_ENV_FILE}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/.env"
@@ -55,12 +54,9 @@ run_deploy_on_target() {
   jar="$(ls "${WS}"/target/task-manager-bot-*.jar | head -1)"
   "${SCP_BASE[@]}" "${jar}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/target/task-manager-bot-0.5-DEMO.jar"
 
-  echo ">>> [deploy] environment.sh"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "sudo bash /tmp/environment.sh"
-
   echo ">>> [deploy] docker compose up"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && sudo docker compose pull --ignore-pull-failures 2>/dev/null || true"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && sudo docker compose up -d --build"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && docker compose pull --ignore-pull-failures 2>/dev/null || true"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && docker compose up -d --build"
 
   echo ">>> [deploy] done. App: http://${SERVER_IP}:8080"
 }
