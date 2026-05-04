@@ -103,8 +103,30 @@ if [[ -n "${JUMP_HOST:-}" && "${USE_PROXYJUMP_FOR_TARGET}" == "1" ]]; then
   fi
   echo ">>> [deploy] SERVER_IP=${SERVER_IP}"
 
-  SSH_BASE=(ssh -o "ProxyJump=${JUMP_USER}@${JUMP_HOST}" -i "${SSH_PRIVATE_KEY}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null)
-  SCP_BASE=(scp -o "ProxyJump=${JUMP_USER}@${JUMP_HOST}" -i "${SSH_PRIVATE_KEY}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null)
+  # ProxyJump часто не передаёт -i на bastion → Permission denied на первом hop.
+  # Явный ProxyCommand: к jump с тем же ключом, затем туннель к целевой ВМ.
+  _PX=(ssh -q -W "%h:%p" -i "${SSH_PRIVATE_KEY}" -o ConnectTimeout=30 -o IdentitiesOnly=yes
+    -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null
+    "${JUMP_USER}@${JUMP_HOST}")
+  _PX_CMD="${_PX[*]}"
+  SSH_BASE=(
+    ssh
+    -o "ProxyCommand=${_PX_CMD}"
+    -i "${SSH_PRIVATE_KEY}"
+    -o IdentitiesOnly=yes
+    -o ConnectTimeout=30
+    -o StrictHostKeyChecking=accept-new
+    -o UserKnownHostsFile=/dev/null
+  )
+  SCP_BASE=(
+    scp
+    -o "ProxyCommand=${_PX_CMD}"
+    -i "${SSH_PRIVATE_KEY}"
+    -o IdentitiesOnly=yes
+    -o ConnectTimeout=30
+    -o StrictHostKeyChecking=accept-new
+    -o UserKnownHostsFile=/dev/null
+  )
 
   run_deploy_on_target
   exit 0
