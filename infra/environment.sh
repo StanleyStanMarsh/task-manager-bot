@@ -28,7 +28,7 @@ apt-get install -y -qq \
     apt-transport-https \
     software-properties-common \
     lsb-release \
-    xfsprogs ext4
+    xfsprogs e2fsprogs
 
 # 2. Установка Docker
 log "Install Docker"
