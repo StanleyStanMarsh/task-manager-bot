@@ -32,6 +32,8 @@ echo ">>> [deploy] USE_PROXYJUMP_FOR_TARGET=${USE_PROXYJUMP_FOR_TARGET}"
 run_deploy_on_target() {
   : "${SERVER_IP:?}"
   local deadline
+  local SUDO
+  SUDO=""
   echo ">>> [deploy] wait for SSH to ${SERVER_IP}"
   deadline=$((SECONDS + ${SSH_READY_TIMEOUT_SEC:-600}))
   until "${SSH_BASE[@]}" -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ssh_ready"; do
@@ -42,8 +44,18 @@ run_deploy_on_target() {
     sleep 10
   done
 
+  # Дожидаемся cloud-init (Heat user_data) — иначе Docker/sudo/директории могут быть ещё не готовы.
+  # cloud-init status --wait может отсутствовать в очень старых образах, поэтому делаем best-effort.
+  echo ">>> [deploy] wait cloud-init (best effort)"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "command -v cloud-init >/dev/null 2>&1 && (cloud-init status --wait || true) || true"
+
+  # Определяем sudo после cloud-init (его ставим в packages)
+  if "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "command -v sudo >/dev/null 2>&1"; then
+    SUDO="sudo"
+  fi
+
   echo ">>> [deploy] prepare remote dir"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "mkdir -p '${REMOTE_DIR}/target' && chown -R '${SSH_USER}:${SSH_USER}' '${REMOTE_DIR}'"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "${SUDO} mkdir -p '${REMOTE_DIR}/target' && ${SUDO} chown -R '${SSH_USER}:${SSH_USER}' '${REMOTE_DIR}'"
 
   echo ">>> [deploy] scp files"
   "${SCP_BASE[@]}" "${WS}/docker-compose.yml" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/docker-compose.yml"
@@ -55,8 +67,8 @@ run_deploy_on_target() {
   "${SCP_BASE[@]}" "${jar}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/target/task-manager-bot-0.5-DEMO.jar"
 
   echo ">>> [deploy] docker compose up"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && docker compose pull --ignore-pull-failures 2>/dev/null || true"
-  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && docker compose up -d --build"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && (docker compose pull --ignore-pull-failures 2>/dev/null || ${SUDO} docker compose pull --ignore-pull-failures 2>/dev/null || true)"
+  "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "cd '${REMOTE_DIR}' && (docker compose up -d --build || ${SUDO} docker compose up -d --build)"
 
   echo ">>> [deploy] done. App: http://${SERVER_IP}:8080"
 }
