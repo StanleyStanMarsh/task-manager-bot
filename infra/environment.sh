@@ -62,12 +62,13 @@ log "Docker Compose: $(docker compose version)"
 # 3. Установка Java 23
 log "Install Java 23"
 
-JAVA_VERSION="23.0.2+7"
-JAVA_BUILD="23.0.2+7"
+JAVA_TAG="23.0.2_7"
+# В URL GitHub символ "+" в теге релиза закодирован как %2B
+JAVA_RELEASE_TAG="23.0.2%2B7"
 
-JAVA_FILENAME="OpenJDK23U-jdk_x64_linux_hotspot_${JAVA_BUILD}.tar.gz"
+JAVA_FILENAME="OpenJDK23U-jdk_x64_linux_hotspot_${JAVA_TAG}.tar.gz"
 
-JAVA_URL="https://github.com/adoptium/temurin23-binaries/releases/download/jdk-${JAVA_VERSION}/${JAVA_FILENAME}"
+JAVA_URL="https://github.com/adoptium/temurin23-binaries/releases/download/jdk-${JAVA_RELEASE_TAG}/${JAVA_FILENAME}"
 
 JAVA_INSTALL_DIR="/opt/java/temurin-23"
 
