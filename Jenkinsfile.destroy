@@ -4,14 +4,14 @@ pipeline {
 
   parameters {
     string(name: 'STACK_NAME', defaultValue: '', trim: true,
-      description: 'Имя стека Heat для удаления (обязательно).')
+      description: 'Имя стека Heat для удаления.')
     booleanParam(name: 'DRY_RUN', defaultValue: false,
-      description: 'Если включено — только openstack stack show, без delete.')
+      description: 'Показать стек без удаления.')
     string(name: 'JUMP_HOST', defaultValue: '', trim: true,
-      description: 'Jump ВМ, если Jenkins не достучится до OpenStack API. Пусто — команды на агенте.')
+      description: 'Jump ВМ')
     string(name: 'JUMP_USER', defaultValue: 'ubuntu', trim: true)
-    string(name: 'SSH_PRIVATE_KEY', defaultValue: '/var/jenkins_home/.ssh/astafyev-key.pem', trim: true,
-      description: 'Ключ Jenkins → jump (если задан JUMP_HOST).')
+    string(name: 'SSH_PRIVATE_KEY', defaultValue: '/var/jenkins_home/.ssh/lozhkina.pem', trim: true,
+      description: 'Ключ Jenkins -> jump (если задан JUMP_HOST).')
   }
 
   stages {

@@ -1,8 +1,8 @@
 heat_template_version: 2015-10-15
 
 description: |
-  Инфраструктура для task-management-bot: ВМ Ubuntu, Cinder-том под Mongo,
-  подключение к существующим security groups (без создания дубликата astafyev-sg).
+  ВМ Ubuntu, Cinder-том под Mongo,
+  подключение к существующим security groups.
 
 parameters:
   image_id:
@@ -18,20 +18,16 @@ parameters:
   key_name:
     type: string
     label: SSH key pair name (Nova)
-    default: "astafyev-key"
+    default: "lozhkina"
 
   existing_subnet_id:
     type: string
     label: Subnet UUID (e.g. student-net)
-    description: |
-      Укажите UUID подсети из Horizon (Network → student-net → Subnets).
 
   security_groups:
     type: comma_delimited_list
     label: Existing Nova security group names
-    description: |
-      Список имён уже созданных групп (через запятую), например astafyev-sg или astafyev-sg,default.
-    default: "astafyev-sg"
+    default: "lozhkina"
 
   availability_zone:
     type: string
@@ -71,8 +67,6 @@ resources:
         #cloud-config
         package_update: true
         package_upgrade: true
-        # Официальный Docker CE + Compose plugin (см. обсуждение apt/keyid на Stack Overflow и документацию Docker).
-        # Образ ВМ у студенческих облаков обычно amd64; для arm64 замените [arch=amd64] на [arch=arm64].
         apt:
           sources:
             docker-ce.list:
@@ -129,7 +123,7 @@ resources:
 
 outputs:
   server_private_ip:
-    description: "Private IP address (first address on subnet)"
+    description: "Private IP address"
     value: { get_attr: [bot_server, first_address] }
 
   server_name:

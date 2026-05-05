@@ -26,7 +26,7 @@ else
   openstack stack create "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENVFILE}" --wait >&2
 fi
 
-# Некоторые версии OSC путают колонки -f value -c output_value; берём первый IPv4 из вывода
+# некоторые версии OSC путают колонки -f value -c output_value; берём первый IPv4 из вывода
 SERVER_IP="$(
   openstack stack output show "${STACK_NAME}" server_private_ip 2>/dev/null | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' | head -1 || true
 )"

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Запускать НА jump-машине (есть доступ к OpenStack API и к приватной сети студента).
-# Аргументы: BASE_DIR STACK_NAME TARGET_SSH_KEY_PATH TARGET_USER SSH_READY_TIMEOUT_SEC
+
 set -euxo pipefail
 
 BASE_DIR="${1:?}"

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# OPENSTACK_ENV, BOT_ENV_FILE, STACK_NAME, SSH_PRIVATE_KEY, HEAT_ENV_FILE, SSH_USER
-# JUMP_HOST: heat на существующей ВМ. Деплой на целевую ВМ:
-#   USE_PROXYJUMP_FOR_TARGET=1 (по умолчанию) — ключ только на Jenkins, SSH через jump (без ключа на диске jump)
-#   USE_PROXYJUMP_FOR_TARGET=0 — полный сценарий на jump, нужен TARGET_SSH_KEY_ON_JUMP на ВМ
+
 set -euxo pipefail
 
 : "${OPENSTACK_ENV:?}"
@@ -13,8 +10,8 @@ set -euxo pipefail
 : "${SSH_USER:=ubuntu}"
 
 : "${JUMP_USER:=ubuntu}"
-: "${TARGET_SSH_KEY_ON_JUMP:=/home/ubuntu/.ssh/astafyev-key.pem}"
-# 1 = ProxyJump с агента Jenkins; 0 = scp/ssh с jump к целевой ВМ
+: "${TARGET_SSH_KEY_ON_JUMP:=/home/ubuntu/.ssh/lozhkina.pem}"
+
 : "${USE_PROXYJUMP_FOR_TARGET:=1}"
 
 WS="${WORKSPACE:-$(pwd)}"
@@ -24,11 +21,11 @@ TEMPLATE="$WS/infra/template.yaml"
 ENV_ABS="$WS/$HEAT_ENV_FILE"
 REMOTE_DIR="/opt/task-manager-bot"
 
-echo ">>> [deploy] workspace=${WS}"
-echo ">>> [deploy] JUMP_HOST=${JUMP_HOST:-<empty>}"
-echo ">>> [deploy] USE_PROXYJUMP_FOR_TARGET=${USE_PROXYJUMP_FOR_TARGET}"
+echo "[deploy] workspace=${WS}"
+echo "JUMP_HOST=${JUMP_HOST:-<empty>}"
+echo "USE_PROXYJUMP_FOR_TARGET=${USE_PROXYJUMP_FOR_TARGET}"
 
-# --- Общий деплой на целевую ВМ (после того как известен SERVER_IP) ---
+#  Общий деплой на целевую ВМ 
 run_deploy_on_target() {
   : "${SERVER_IP:?}"
   local deadline
@@ -44,20 +41,20 @@ run_deploy_on_target() {
     sleep 10
   done
 
-  # Дожидаемся cloud-init (Heat user_data) — иначе Docker/sudo/директории могут быть ещё не готовы.
-  # cloud-init status --wait может отсутствовать в очень старых образах, поэтому делаем best-effort.
-  echo ">>> [deploy] wait cloud-init (best effort)"
+  # дожидаемся cloud-init (Heat user_data) — иначе Docker/sudo/директории могут быть ещё не готовы
+  # cloud-init status --wait может отсутствовать в очень старых образах, поэтому делаем best-effort
+  echo "wait cloud-init (best effort)"
   "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "command -v cloud-init >/dev/null 2>&1 && (cloud-init status --wait || true) || true"
 
-  # Определяем sudo после cloud-init (его ставим в packages)
+  # определяем sudo после cloud-init  ставим в packages
   if "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "command -v sudo >/dev/null 2>&1"; then
     SUDO="sudo"
   fi
 
-  echo ">>> [deploy] prepare remote dir"
+  echo "prepare remote dir"
   "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" "${SUDO} mkdir -p '${REMOTE_DIR}/target' && ${SUDO} chown -R '${SSH_USER}:${SSH_USER}' '${REMOTE_DIR}'"
 
-  echo ">>> [deploy] scp files"
+  echo "scp files"
   "${SCP_BASE[@]}" "${WS}/docker-compose.yml" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/docker-compose.yml"
   "${SCP_BASE[@]}" "${WS}/Dockerfile" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/Dockerfile"
   "${SCP_BASE[@]}" "${BOT_ENV_FILE}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/.env"
@@ -67,7 +64,7 @@ run_deploy_on_target() {
   "${SCP_BASE[@]}" "${jar}" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/target/task-manager-bot-0.5-DEMO.jar"
 
   echo ">>> [deploy] docker compose up"
-  # Часто docker.io без плагина: подкоманда «compose» недоступна → ставим пакет docker-compose (см. Heat template).
+  # часто docker.io без плагина: подкоманда «compose» недоступна -> ставим пакет docker-compose
   "${SSH_BASE[@]}" "${SSH_USER}@${SERVER_IP}" bash -s <<DEPLOY_EOF
 set -euxo pipefail
 cd ${REMOTE_DIR}
@@ -102,14 +99,13 @@ compose_pull
 compose_up
 DEPLOY_EOF
 
-  echo ">>> [deploy] done. App: http://${SERVER_IP}:8080"
+  echo "deploy done. App: http://${SERVER_IP}:8080"
 }
 
-# ---------------------------------------------------------------------------
-# Jump + ProxyJump: Heat на jump, деплой с Jenkins (ключ не хранится на jump)
-# ---------------------------------------------------------------------------
+
+# jump + ProxyJump: Heat на jump, деплой с Jenkins (ключ не хранится на jump)
 if [[ -n "${JUMP_HOST:-}" && "${USE_PROXYJUMP_FOR_TARGET}" == "1" ]]; then
-  echo ">>> [deploy] режим: Heat на jump, деплой через ProxyJump с агента (ключ только здесь)"
+  echo "режим: Heat на jump, деплой через ProxyJump с агента (ключ только здесь)"
 
   STAGE="$(mktemp -d)"
   cleanup_stage() { rm -rf "${STAGE}"; }
@@ -141,10 +137,10 @@ if [[ -n "${JUMP_HOST:-}" && "${USE_PROXYJUMP_FOR_TARGET}" == "1" ]]; then
     echo "Could not read SERVER_IP from heat-only script" >&2
     exit 1
   fi
-  echo ">>> [deploy] SERVER_IP=${SERVER_IP}"
+  echo "SERVER_IP=${SERVER_IP}"
 
-  # ProxyJump часто не передаёт -i на bastion → Permission denied на первом hop.
-  # Явный ProxyCommand: к jump с тем же ключом, затем туннель к целевой ВМ.
+  # proxyJump часто не передаёт -i на bastion → Permission denied на первом hop
+  # явный ProxyCommand: к jump с тем же ключом, затем туннель к целевой ВМ
   _PX=(ssh -q -W "%h:%p" -i "${SSH_PRIVATE_KEY}" -o ConnectTimeout=30 -o IdentitiesOnly=yes
     -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null
     "${JUMP_USER}@${JUMP_HOST}")
@@ -172,11 +168,10 @@ if [[ -n "${JUMP_HOST:-}" && "${USE_PROXYJUMP_FOR_TARGET}" == "1" ]]; then
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# Jump без ProxyJump: всё на jump (нужен приватный ключ на jump → целевая ВМ)
-# ---------------------------------------------------------------------------
+
+# Jump без ProxyJump: всё на jump (нужен приватный ключ на jump -> целевая ВМ)
 if [[ -n "${JUMP_HOST:-}" ]]; then
-  echo ">>> [deploy] режим: Heat и деплой целиком на ${JUMP_USER}@${JUMP_HOST} (нужен ключ TARGET_SSH_KEY_ON_JUMP на jump)"
+  echo "режим: Heat и деплой целиком на ${JUMP_USER}@${JUMP_HOST} (нужен ключ TARGET_SSH_KEY_ON_JUMP на jump)"
 
   STAGE="$(mktemp -d)"
   cleanup_stage() { rm -rf "${STAGE}"; }
@@ -207,14 +202,13 @@ if [[ -n "${JUMP_HOST:-}" ]]; then
 
   "${JUMP_SSH[@]}" "${JUMP_USER}@${JUMP_HOST}" "rm -rf '${REMOTE_BASE}'"
 
-  echo ">>> [deploy] jump full-режим завершён"
+  echo "jump full-режим завершён"
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# Локальный режим (openstack на агенте Jenkins)
-# ---------------------------------------------------------------------------
-echo ">>> [deploy] локальный openstack: template=${TEMPLATE} env=${ENV_ABS}"
+
+# openstack на агенте Jenkins
+echo "Локальный openstack: template=${TEMPLATE} env=${ENV_ABS}"
 
 set -a
 # shellcheck source=/dev/null
@@ -224,10 +218,10 @@ set +a
 openstack token issue >/dev/null
 
 if openstack stack show "${STACK_NAME}" &>/dev/null; then
-  echo ">>> [deploy] Heat stack update: ${STACK_NAME}"
+  echo "Heat stack update: ${STACK_NAME}"
   openstack stack update "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENV_ABS}" --wait
 else
-  echo ">>> [deploy] Heat stack create: ${STACK_NAME}"
+  echo "Heat stack create: ${STACK_NAME}"
   openstack stack create "${STACK_NAME}" -t "${TEMPLATE}" -e "${ENV_ABS}" --wait
 fi
 
@@ -238,7 +232,7 @@ if [[ -z "${SERVER_IP}" ]]; then
   echo "Empty server_private_ip output" >&2
   exit 1
 fi
-echo ">>> [deploy] Target VM: ${SERVER_IP}"
+echo "Target VM: ${SERVER_IP}"
 
 SSH_BASE=(ssh -i "${SSH_PRIVATE_KEY}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null)
 SCP_BASE=(scp -i "${SSH_PRIVATE_KEY}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null)

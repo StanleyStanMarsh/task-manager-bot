@@ -1,9 +1,7 @@
-# Скопируйте в heat-env.yaml и подставьте свой existing_subnet_id.
-# Использование: openstack stack create ... -e infra/heat-env.yaml
 parameters:
   image_id: "16729277-5d18-44ce-9581-1b2fd5d5659a"
   flavor_id: "m1.small"
-  key_name: "astafyev-key"
+  key_name: "lozhkina"
   existing_subnet_id: "REPLACE_WITH_STUDENT_NET_SUBNET_UUID"
-  security_groups: "astafyev-sg"
+  security_groups: "lozhkina"
   availability_zone: "nova"

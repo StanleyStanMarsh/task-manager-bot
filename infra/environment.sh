@@ -6,8 +6,8 @@ log() {
     echo "[environment] $*" >&2
 }
 
-# Проверка прав root
-# Скрипт должен запускаться с правами root
+# проверка прав root
+# скрипт должен запускаться с правами root
 if [[ $EUID -ne 0 ]]; then
     echo "Run as root: sudo $0" >&2
     exit 1
@@ -15,7 +15,7 @@ fi
 
 log "Start environment setup"
 
-# 1. Установка базовых пакетов
+# установка базовых пакетов
 log "Install base packages"
 
 export DEBIAN_FRONTEND=noninteractive
@@ -30,7 +30,7 @@ apt-get install -y -qq \
     lsb-release \
     xfsprogs e2fsprogs
 
-# 2. Установка Docker
+# установка Docker
 log "Install Docker"
 
 # удаляем старые версии docker если они есть
@@ -59,11 +59,11 @@ systemctl enable --now docker
 log "Docker: $(docker --version)"
 log "Docker Compose: $(docker compose version)"
 
-# 3. Установка Java 23
+# установка Java 23
 log "Install Java 23"
 
 JAVA_TAG="23.0.2_7"
-# В URL GitHub символ "+" в теге релиза закодирован как %2B
+# в URL GitHub символ "+" в теге релиза закодирован как %2B
 JAVA_RELEASE_TAG="23.0.2%2B7"
 
 JAVA_FILENAME="OpenJDK23U-jdk_x64_linux_hotspot_${JAVA_TAG}.tar.gz"
@@ -104,7 +104,7 @@ fi
 
 log "Java: $(${JAVA_INSTALL_DIR}/bin/java -version 2>&1 | head -1)"
 
-# 4. Монтирование Cinder-тома для MongoDB
+# монтирование Cinder-тома для MongoDB
 log "Configure MongoDB volume"
 
 mount_volume() {
@@ -161,7 +161,7 @@ mount_volume() {
 # единственный том — для MongoDB
 mount_volume "/dev/vdb" "/var/lib/mongodb" "mongodb" "mongodb"
 
-# 5. Пользователь для работы с Docker
+# пользователь для работы с Docker
 log "Configure docker user"
 
 if ! id -u botuser &>/dev/null; then
@@ -186,7 +186,7 @@ fi
 
 log "User botuser added to docker group"
 
-# 6. Директория проекта
+# директория проекта
 log "Prepare project directory"
 
 APP_DIR="/opt/task-manager-bot"

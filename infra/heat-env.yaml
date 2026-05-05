@@ -1,8 +1,8 @@
-# Параметры Heat для окружения студента. При необходимости скорректируйте subnet UUID в Horizon.
+# Параметры Heat для окружения
 parameters:
   image_id: "16729277-5d18-44ce-9581-1b2fd5d5659a"
   flavor_id: "m1.small"
-  key_name: "astafyev-key"
+  key_name: "lozhkina"
   existing_subnet_id: "87af7ae7-714d-4472-b19a-7a4ec8505165"
-  security_groups: "astafyev-sg"
+  security_groups: "lozhkina"
   availability_zone: "nova"
